@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { FONTS } from '../data/config';
+import { FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
 import { Audio } from './audio';
+import { uiPx } from './display';
 
 /** Botão de texto medieval com hover/tap */
 export function makeButton(
@@ -14,7 +15,7 @@ export function makeButton(
   const btn = scene.add
     .text(x, y, label, {
       fontFamily: FONTS.display,
-      fontSize: `${size}px`,
+      fontSize: uiPx(size),
       color: '#f3e6c4',
       stroke: '#2c1c08',
       strokeThickness: 5
@@ -69,8 +70,9 @@ export function makeSlider(
     knob.x = -width / 2 + width * v;
     onChange(v);
   };
-  c.on('pointerdown', (p: Phaser.Input.Pointer) => apply(p.x));
-  c.on('drag', (p: Phaser.Input.Pointer) => apply(p.x));
+  // worldX (não x) para continuar correto sob o zoom de câmera das resoluções maiores
+  c.on('pointerdown', (p: Phaser.Input.Pointer) => apply(p.worldX));
+  c.on('drag', (p: Phaser.Input.Pointer) => apply(p.worldX));
   return c;
 }
 
@@ -95,8 +97,9 @@ export class Dialog {
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
-    const W = scene.scale.width;
-    const H = scene.scale.height;
+    // coordenadas de mundo (960×540) — não do backing store do canvas
+    const W = GAME_WIDTH;
+    const H = GAME_HEIGHT;
     const bg = scene.add.image(0, 0, 'px').setDisplaySize(W - 80, 120).setTint(0x0b0e20).setAlpha(0.92);
     const border = scene.add
       .image(0, 0, 'px')
@@ -106,19 +109,19 @@ export class Dialog {
     border.setDepth(-1);
     this.nameText = scene.add.text(-(W - 80) / 2 + 18, -46, '', {
       fontFamily: FONTS.display,
-      fontSize: '18px',
+      fontSize: uiPx(18),
       color: '#ffc24d'
     });
     this.bodyText = scene.add.text(-(W - 80) / 2 + 18, -20, '', {
       fontFamily: FONTS.body,
-      fontSize: '20px',
+      fontSize: uiPx(20),
       color: '#f3e6c4',
       wordWrap: { width: W - 120 }
     });
     this.hint = scene.add
       .text((W - 80) / 2 - 16, 42, '▼ continuar', {
         fontFamily: FONTS.body,
-        fontSize: '14px',
+        fontSize: uiPx(14),
         color: '#aeb8e8'
       })
       .setOrigin(1, 0.5)

@@ -19,6 +19,8 @@ export class BootScene extends Phaser.Scene {
     this.makeLock();
     this.makeKnight();
     this.makeCharacters();
+    this.makeGlow();
+    this.makeVitrola();
     this.makeMisc();
     this.makeAnimations();
     this.scene.start('Menu');
@@ -32,21 +34,45 @@ export class BootScene extends Phaser.Scene {
   // ---------------------------------------------------------- fundo: castelo
   private makeCastleBackground() {
     const { tex, ctx } = this.ctxOf('bg-castle', GAME_WIDTH, GAME_HEIGHT);
-    // céu noturno em degradê
+
+    // céu noturno em degradê (4 estágios) + véu de névoa baixa
     const sky = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
-    sky.addColorStop(0, '#060a1c');
-    sky.addColorStop(0.6, '#0b1026');
-    sky.addColorStop(1, '#1a2142');
+    sky.addColorStop(0, '#040614');
+    sky.addColorStop(0.35, '#080c22');
+    sky.addColorStop(0.68, '#131a3a');
+    sky.addColorStop(1, '#232c54');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    // estrelas
-    for (let i = 0; i < 140; i++) {
+    const mist = ctx.createLinearGradient(0, 380, 0, 470);
+    mist.addColorStop(0, 'rgba(70,84,140,0)');
+    mist.addColorStop(1, 'rgba(70,84,140,0.16)');
+    ctx.fillStyle = mist;
+    ctx.fillRect(0, 380, GAME_WIDTH, 90);
+
+    // estrelas em 3 tamanhos, algumas com brilho em cruz
+    for (let i = 0; i < 150; i++) {
       const x = Math.random() * GAME_WIDTH;
-      const y = Math.random() * GAME_HEIGHT * 0.65;
-      ctx.fillStyle = Math.random() < 0.2 ? '#fff0b8' : '#aeb8e8';
-      ctx.fillRect(x, y, Math.random() < 0.15 ? 2 : 1, Math.random() < 0.15 ? 2 : 1);
+      const y = Math.random() * GAME_HEIGHT * 0.6;
+      const big = Math.random() < 0.08;
+      const mid = !big && Math.random() < 0.25;
+      const c = Math.random() < 0.2 ? '#fff0b8' : '#c9d2f5';
+      ctx.fillStyle = c;
+      const s = big ? 2 : mid ? 1.4 : 1;
+      ctx.fillRect(x, y, s, s);
+      if (big) {
+        ctx.globalAlpha = 0.55;
+        ctx.fillRect(x - 3, y, 8, 1);
+        ctx.fillRect(x, y - 3, 1, 8);
+        ctx.globalAlpha = 1;
+      }
     }
-    // lua
+
+    // lua com halo suave + crateras
+    const moonHalo = ctx.createRadialGradient(780, 90, 4, 780, 90, 70);
+    moonHalo.addColorStop(0, 'rgba(232,236,255,0.35)');
+    moonHalo.addColorStop(1, 'rgba(232,236,255,0)');
+    ctx.fillStyle = moonHalo;
+    ctx.fillRect(710, 20, 140, 140);
     ctx.fillStyle = '#e8ecff';
     ctx.beginPath();
     ctx.arc(780, 90, 34, 0, Math.PI * 2);
@@ -55,8 +81,30 @@ export class BootScene extends Phaser.Scene {
     ctx.beginPath();
     ctx.arc(770, 82, 8, 0, Math.PI * 2);
     ctx.arc(792, 100, 5, 0, Math.PI * 2);
+    ctx.arc(768, 100, 3.5, 0, Math.PI * 2);
     ctx.fill();
-    // colinas
+    // nuvens finas translúcidas cruzando a lua
+    ctx.fillStyle = 'rgba(20,24,50,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(740, 100, 60, 8, -0.1, 0, Math.PI * 2);
+    ctx.ellipse(820, 70, 40, 6, 0.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // montanhas distantes — plano extra de profundidade atrás das colinas
+    ctx.fillStyle = '#0d1230';
+    ctx.beginPath();
+    ctx.moveTo(0, 430);
+    ctx.lineTo(120, 360);
+    ctx.lineTo(260, 420);
+    ctx.lineTo(430, 340);
+    ctx.lineTo(600, 410);
+    ctx.lineTo(760, 350);
+    ctx.lineTo(960, 420);
+    ctx.lineTo(960, 470);
+    ctx.lineTo(0, 470);
+    ctx.fill();
+
+    // colinas (plano próximo)
     ctx.fillStyle = '#101632';
     ctx.beginPath();
     ctx.moveTo(0, 470);
@@ -65,24 +113,48 @@ export class BootScene extends Phaser.Scene {
     ctx.lineTo(960, 540);
     ctx.lineTo(0, 540);
     ctx.fill();
-    // castelo (silhueta com janelas acesas)
+
+    // castelo (silhueta com face iluminada pela lua à direita, sombra à esquerda)
     const castle = (x: number, w: number, h: number, roof = true) => {
-      ctx.fillStyle = '#161c38';
+      const litSide = ctx.createLinearGradient(x, 0, x + w, 0);
+      litSide.addColorStop(0, '#12162e');
+      litSide.addColorStop(1, '#242b52');
+      ctx.fillStyle = litSide;
       ctx.fillRect(x, 460 - h, w, h);
+      // sugestão de textura de pedra: linhas esparsas
+      ctx.strokeStyle = 'rgba(8,10,24,0.4)';
+      ctx.lineWidth = 1;
+      for (let sy = 460 - h + 12; sy < 456; sy += 18) {
+        ctx.beginPath();
+        ctx.moveTo(x + 2, sy);
+        ctx.lineTo(x + w - 2, sy);
+        ctx.stroke();
+      }
       // ameias
       for (let bx = x; bx < x + w; bx += 14) ctx.fillRect(bx, 460 - h - 8, 8, 8);
       if (roof) {
-        ctx.fillStyle = '#20264a';
+        const roofGrad = ctx.createLinearGradient(x - 6, 0, x + w + 6, 0);
+        roofGrad.addColorStop(0, '#181e3e');
+        roofGrad.addColorStop(1, '#2c3462');
+        ctx.fillStyle = roofGrad;
         ctx.beginPath();
         ctx.moveTo(x - 6, 460 - h - 8);
         ctx.lineTo(x + w / 2, 460 - h - 8 - w * 0.7);
         ctx.lineTo(x + w + 6, 460 - h - 8);
         ctx.fill();
+        // brilho no cume do telhado
+        ctx.fillStyle = 'rgba(174,184,232,0.7)';
+        ctx.fillRect(x + w / 2 - 1, 460 - h - 8 - w * 0.7, 2, 6);
       }
-      // janelas
+      // janelas com halo por trás das acesas
       for (let wy = 460 - h + 18; wy < 440; wy += 34) {
         for (let wx = x + 10; wx < x + w - 12; wx += 24) {
           if (Math.random() < 0.55) {
+            const halo = ctx.createRadialGradient(wx + 3, wy + 5, 1, wx + 3, wy + 5, 9);
+            halo.addColorStop(0, 'rgba(255,194,77,0.45)');
+            halo.addColorStop(1, 'rgba(255,194,77,0)');
+            ctx.fillStyle = halo;
+            ctx.fillRect(wx - 8, wy - 6, 22, 22);
             ctx.fillStyle = Math.random() < 0.5 ? '#ffc24d' : '#ff8a3c';
             ctx.fillRect(wx, wy, 6, 10);
           }
@@ -96,12 +168,45 @@ export class BootScene extends Phaser.Scene {
     ctx.fillRect(250, 340, 390, 120); // corpo do castelo
     for (let bx = 250; bx < 640; bx += 16) ctx.fillRect(bx, 332, 9, 8);
     castle(420, 90, 300); // torre principal
-    // portão
+
+    // estandartes nas torres laterais
+    const banner = (x: number, y: number, color: string) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, 10, 26);
+      ctx.beginPath();
+      ctx.moveTo(x, y + 26);
+      ctx.lineTo(x + 5, y + 34);
+      ctx.lineTo(x + 10, y + 26);
+      ctx.fill();
+    };
+    banner(211, 312, '#7a1f1f');
+    banner(671, 332, '#27408b');
+
+    // portão com brilho quente vazando por baixo
+    const gateGlow = ctx.createRadialGradient(465, 460, 2, 465, 460, 44);
+    gateGlow.addColorStop(0, 'rgba(255,138,60,0.55)');
+    gateGlow.addColorStop(1, 'rgba(255,138,60,0)');
+    ctx.fillStyle = gateGlow;
+    ctx.fillRect(415, 420, 100, 60);
     ctx.fillStyle = '#0a0d20';
     ctx.beginPath();
     ctx.arc(445 + 20, 460, 26, Math.PI, 0);
     ctx.fill();
     ctx.fillRect(439, 460, 52, 0);
+
+    // as sete luzes — pontinhos dourados no topo da torre principal
+    for (let i = 0; i < 7; i++) {
+      const lx = 465 - 15 + i * 5;
+      const ly = 158 + Math.sin(i * 1.3) * 3;
+      const g = ctx.createRadialGradient(lx, ly, 0.5, lx, ly, 4);
+      g.addColorStop(0, 'rgba(255,240,184,0.95)');
+      g.addColorStop(1, 'rgba(255,194,77,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(lx - 4, ly - 4, 8, 8);
+      ctx.fillStyle = '#fff0b8';
+      ctx.fillRect(lx, ly, 1, 1);
+    }
+
     tex.refresh();
   }
 
@@ -200,32 +305,41 @@ export class BootScene extends Phaser.Scene {
 
   // -------------------------------------------------------------- torre: tiles
   private makeTowerTiles() {
-    // parede interna
+    // parede interna — blocos de pedra irregulares com juntas, rachaduras e musgo
     {
       const { tex, ctx } = this.ctxOf('wall', 64, 64);
-      ctx.fillStyle = '#2e3350';
+      ctx.fillStyle = '#2a2f4a';
       ctx.fillRect(0, 0, 64, 64);
-      ctx.strokeStyle = '#232742';
-      ctx.lineWidth = 2;
-      for (let y = 0; y < 64; y += 16) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(64, y);
-        ctx.stroke();
-        for (let x = (y / 16) % 2 === 0 ? 0 : 16; x < 64; x += 32) {
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x, y + 16);
-          ctx.stroke();
-        }
+      const blocks: Array<[number, number, number, number]> = [
+        [0, 0, 30, 16], [30, 0, 34, 16],
+        [0, 16, 20, 18], [20, 16, 22, 18], [42, 16, 22, 18],
+        [0, 34, 34, 16], [34, 34, 30, 16],
+        [0, 50, 24, 14], [24, 50, 20, 14], [44, 50, 20, 14]
+      ];
+      for (const [bx, by, bw, bh] of blocks) {
+        const tone = 0x2e3350 + (Math.random() < 0.5 ? 0x060a10 : 0);
+        ctx.fillStyle = `rgb(${(tone >> 16) & 0xff},${(tone >> 8) & 0xff},${tone & 0xff})`;
+        ctx.fillRect(bx + 1, by + 1, bw - 2, bh - 2);
+        ctx.fillStyle = 'rgba(120,128,168,0.18)';
+        ctx.fillRect(bx + 1, by + 1, bw - 2, 2);
       }
-      // variação de pedra
-      ctx.fillStyle = 'rgba(86,94,133,0.25)';
-      ctx.fillRect(4, 4, 24, 10);
-      ctx.fillRect(36, 36, 22, 10);
+      ctx.strokeStyle = 'rgba(8,10,22,0.65)';
+      ctx.lineWidth = 1;
+      for (const [bx, by, bw, bh] of blocks) ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+      // rachaduras
+      ctx.strokeStyle = 'rgba(8,10,22,0.5)';
+      ctx.beginPath();
+      ctx.moveTo(24, 20);
+      ctx.lineTo(28, 28);
+      ctx.lineTo(25, 34);
+      ctx.stroke();
+      // musgo
+      ctx.fillStyle = 'rgba(74,102,70,0.28)';
+      ctx.fillRect(2, 48, 10, 6);
+      ctx.fillRect(46, 6, 12, 5);
       tex.refresh();
     }
-    // plataforma / laje
+    // plataforma / laje — bisel claro no topo, fissuras, cantos gastos
     {
       const { tex, ctx } = this.ctxOf('floor', 32, 24);
       ctx.fillStyle = '#565e85';
@@ -234,31 +348,144 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(0, 8, 32, 16);
       ctx.fillStyle = '#767ea8';
       ctx.fillRect(0, 0, 32, 2);
+      ctx.strokeStyle = 'rgba(20,24,44,0.5)';
+      ctx.beginPath();
+      ctx.moveTo(9, 8);
+      ctx.lineTo(12, 14);
+      ctx.lineTo(10, 20);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(20,24,44,0.35)';
+      ctx.fillRect(0, 6, 4, 2);
+      ctx.fillRect(28, 7, 4, 2);
       ctx.strokeStyle = '#2a2f45';
       ctx.strokeRect(0.5, 0.5, 31, 23);
       tex.refresh();
     }
-    // escada
+    // escada — montantes com veios de madeira, degraus com sombra, braçadeiras metálicas
     {
       const { tex, ctx } = this.ctxOf('ladder', 32, 32);
-      ctx.fillStyle = '#7a5227';
-      ctx.fillRect(4, 0, 5, 32);
-      ctx.fillRect(23, 0, 5, 32);
-      ctx.fillStyle = '#5b3a1e';
-      for (let y = 4; y < 32; y += 8) ctx.fillRect(4, y, 24, 4);
+      const railL = 4;
+      const railR = 23;
+      const railW = 5;
+      ctx.fillStyle = '#6b431f';
+      ctx.fillRect(railL, 0, railW, 32);
+      ctx.fillRect(railR, 0, railW, 32);
+      // veios de madeira
+      ctx.strokeStyle = 'rgba(58,36,16,0.5)';
+      ctx.lineWidth = 1;
+      for (const rx of [railL, railR]) {
+        ctx.beginPath();
+        ctx.moveTo(rx + 1.5, 0);
+        ctx.lineTo(rx + 1.5, 32);
+        ctx.moveTo(rx + 3.5, 0);
+        ctx.lineTo(rx + 3.5, 32);
+        ctx.stroke();
+      }
+      // realce claro na borda externa dos montantes
+      ctx.fillStyle = 'rgba(214,168,110,0.35)';
+      ctx.fillRect(railL, 0, 1, 32);
+      ctx.fillRect(railR + railW - 1, 0, 1, 32);
+      // degraus com sombra por baixo
+      for (let y = 4; y < 32; y += 8) {
+        ctx.fillStyle = '#3f2810';
+        ctx.fillRect(4, y + 2, 24, 2);
+        ctx.fillStyle = '#5b3a1e';
+        ctx.fillRect(4, y, 24, 3);
+        ctx.fillStyle = 'rgba(214,168,110,0.4)';
+        ctx.fillRect(4, y, 24, 1);
+      }
+      // braçadeiras metálicas a cada 16px
+      ctx.fillStyle = '#8890b0';
+      ctx.fillRect(railL - 1, 0, railW + 2, 2);
+      ctx.fillRect(railR - 1, 0, railW + 2, 2);
+      ctx.fillRect(railL - 1, 16, railW + 2, 2);
+      ctx.fillRect(railR - 1, 16, railW + 2, 2);
       tex.refresh();
     }
-    // pedestal da vela
+    // pedestal da vela — base e capitel moldurados, fuste caneleado, anel dourado
     {
       const { tex, ctx } = this.ctxOf('pedestal', 48, 36);
-      ctx.fillStyle = '#565e85';
-      ctx.fillRect(8, 0, 32, 6);
+      // capitel
+      ctx.fillStyle = '#666fa0';
+      ctx.fillRect(6, 0, 36, 5);
+      ctx.fillStyle = '#454c76';
+      ctx.fillRect(9, 5, 30, 3);
+      // fuste caneleado
       ctx.fillStyle = '#3d4463';
-      ctx.fillRect(14, 6, 20, 24);
-      ctx.fillStyle = '#565e85';
-      ctx.fillRect(6, 30, 36, 6);
+      ctx.fillRect(14, 8, 20, 20);
+      ctx.strokeStyle = 'rgba(20,24,44,0.5)';
+      ctx.lineWidth = 1;
+      for (let x = 17; x < 32; x += 4) {
+        ctx.beginPath();
+        ctx.moveTo(x, 9);
+        ctx.lineTo(x, 27);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(174,184,232,0.2)';
+      for (let x = 15; x < 32; x += 4) {
+        ctx.beginPath();
+        ctx.moveTo(x, 9);
+        ctx.lineTo(x, 27);
+        ctx.stroke();
+      }
+      // anel dourado
       ctx.fillStyle = '#d9a441';
-      ctx.fillRect(20, 12, 8, 3);
+      ctx.fillRect(13, 15, 22, 3);
+      ctx.fillStyle = '#fff0b8';
+      ctx.fillRect(13, 15, 22, 1);
+      // pequeno arco entalhado
+      ctx.strokeStyle = 'rgba(217,164,65,0.5)';
+      ctx.beginPath();
+      ctx.arc(24, 24, 5, Math.PI, 0);
+      ctx.stroke();
+      // base moldurada
+      ctx.fillStyle = '#454c76';
+      ctx.fillRect(8, 28, 32, 3);
+      ctx.fillStyle = '#666fa0';
+      ctx.fillRect(5, 31, 38, 5);
+      // sombra própria
+      ctx.fillStyle = 'rgba(6,10,22,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(24, 35, 20, 2.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      tex.refresh();
+    }
+    // tocha de parede
+    {
+      const draw = (key: string, offset: number) => {
+        const { tex, ctx } = this.ctxOf(key, 16, 26);
+        ctx.fillStyle = '#454c76';
+        ctx.fillRect(6, 16, 4, 8);
+        ctx.fillStyle = '#5b3a1e';
+        ctx.fillRect(5, 12, 6, 6);
+        ctx.fillStyle = '#ff8a3c';
+        ctx.beginPath();
+        ctx.ellipse(8, 8 - offset, 3.4, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffc24d';
+        ctx.beginPath();
+        ctx.ellipse(8, 9 - offset, 2.2, 4.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff0b8';
+        ctx.beginPath();
+        ctx.ellipse(8, 10 - offset, 1.2, 2.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        tex.refresh();
+      };
+      draw('torch-flame-0', 0);
+      draw('torch-flame-1', 1.4);
+    }
+    // vinheta — escurece as bordas da tela
+    {
+      const { tex, ctx } = this.ctxOf('vignette', GAME_WIDTH, GAME_HEIGHT);
+      const g = ctx.createRadialGradient(
+        GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_HEIGHT * 0.35,
+        GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_HEIGHT * 0.75
+      );
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.55)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
       tex.refresh();
     }
     // portão mágico (8º andar)
@@ -270,12 +497,28 @@ export class BootScene extends Phaser.Scene {
       g.addColorStop(1, 'rgba(122,31,31,0.15)');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, 72, 120);
+      const core = ctx.createRadialGradient(36, 60, 2, 36, 60, 40);
+      core.addColorStop(0, 'rgba(255,240,184,0.55)');
+      core.addColorStop(1, 'rgba(255,240,184,0)');
+      ctx.fillStyle = core;
+      ctx.fillRect(0, 0, 72, 120);
       ctx.strokeStyle = '#ffc24d';
       ctx.lineWidth = 2;
       for (let y = 6; y < 120; y += 14) {
         ctx.beginPath();
         ctx.moveTo(8, y);
         ctx.lineTo(64, y);
+        ctx.stroke();
+      }
+      // runas simples
+      ctx.strokeStyle = 'rgba(255,240,184,0.7)';
+      ctx.lineWidth = 1;
+      for (let y = 12; y < 112; y += 28) {
+        ctx.beginPath();
+        ctx.moveTo(20, y);
+        ctx.lineTo(28, y + 8);
+        ctx.moveTo(28, y);
+        ctx.lineTo(20, y + 8);
         ctx.stroke();
       }
       tex.refresh();
@@ -341,69 +584,53 @@ export class BootScene extends Phaser.Scene {
   private makeKnight() {
     const FW = 20;
     const FH = 28;
+    type Rect = [x: number, y: number, w: number, h: number, cor: string];
+
+    const steel = '#aeb8e8';
+    const steelD = '#767ea8';
+    const plume = '#a53434';
+    const gold = '#d9a441';
+    const shadow = '#2a2f45';
+    const visor = '#1d2136';
+
+    // pluma, elmo, viseira, torso e detalhe dourado — comum a todas as poses
+    // (dy = deslocamento vertical do corpo ao ajoelhar)
+    const base = (dy: number): Rect[] => [
+      [9, 0 + dy, 3, 4, plume],
+      [6, 3 + dy, 9, 6, steel],
+      [7, 5 + dy, 7, 2, visor],
+      [5, 9 + dy, 11, 9, steelD],
+      [9, 10 + dy, 3, 7, gold]
+    ];
+    const arms = (dy: number): Record<string, Rect[]> => ({
+      climb0: [[3, 6 + dy, 3, 8, steel], [15, 11 + dy, 3, 8, steel]],
+      climb1: [[3, 11 + dy, 3, 8, steel], [15, 6 + dy, 3, 8, steel]],
+      jump: [[2, 8, 3, 6, steel], [16, 8, 3, 6, steel]],
+      default: [[3, 10 + dy, 3, 8, steel], [15, 10 + dy, 3, 8, steel]]
+    });
+    const legs: Record<string, Rect[]> = {
+      kneel: [[6, 21, 4, 4, steelD], [12, 18, 4, 8, steelD], [4, 25, 8, 3, shadow]],
+      walk0: [[6, 18, 4, 10, steelD], [12, 18, 4, 8, steelD]],
+      walk1: [[5, 18, 4, 9, steelD], [13, 18, 4, 10, steelD]],
+      walk2: [[7, 18, 4, 8, steelD], [11, 18, 4, 10, steelD]],
+      walk3: [[6, 18, 4, 10, steelD], [12, 18, 4, 9, steelD]],
+      jump: [[6, 18, 4, 7, steelD], [12, 18, 4, 7, steelD]],
+      default: [[7, 18, 4, 10, steelD], [11, 18, 4, 10, steelD]]
+    };
+
     const frames = ['idle', 'walk0', 'walk1', 'walk2', 'walk3', 'jump', 'climb0', 'climb1', 'kneel'];
     const { tex, ctx } = this.ctxOf('knight-sheet', FW * frames.length, FH);
 
-    const drawKnight = (ox: number, pose: string) => {
-      const P = (x: number, y: number, w: number, h: number, c: string) => {
-        ctx.fillStyle = c;
+    frames.forEach((pose, i) => {
+      const ox = i * FW;
+      const dy = pose === 'kneel' ? 5 : 0;
+      const a = arms(dy);
+      const rects = [...base(dy), ...(a[pose] ?? a.default), ...(legs[pose] ?? legs.default)];
+      for (const [x, y, w, h, cor] of rects) {
+        ctx.fillStyle = cor;
         ctx.fillRect(ox + x, y, w, h);
-      };
-      const steel = '#aeb8e8';
-      const steelD = '#767ea8';
-      const plume = '#a53434';
-      const gold = '#d9a441';
-      const kneel = pose === 'kneel';
-      const dy = kneel ? 5 : 0;
-      // pluma
-      P(9, 0 + dy, 3, 4, plume);
-      // elmo
-      P(6, 3 + dy, 9, 6, steel);
-      P(7, 5 + dy, 7, 2, '#1d2136'); // viseira
-      // torso
-      P(5, 9 + dy, 11, 9, steelD);
-      P(9, 10 + dy, 3, 7, gold); // detalhe dourado
-      // braços
-      if (pose === 'climb0') {
-        P(3, 6 + dy, 3, 8, steel);
-        P(15, 11 + dy, 3, 8, steel);
-      } else if (pose === 'climb1') {
-        P(3, 11 + dy, 3, 8, steel);
-        P(15, 6 + dy, 3, 8, steel);
-      } else if (pose === 'jump') {
-        P(2, 8, 3, 6, steel);
-        P(16, 8, 3, 6, steel);
-      } else {
-        P(3, 10 + dy, 3, 8, steel);
-        P(15, 10 + dy, 3, 8, steel);
       }
-      // pernas
-      if (kneel) {
-        P(6, 21, 4, 4, steelD); // joelho no chão
-        P(12, 18, 4, 8, steelD);
-        P(4, 25, 8, 3, '#2a2f45');
-      } else if (pose === 'walk0') {
-        P(6, 18, 4, 10, steelD);
-        P(12, 18, 4, 8, steelD);
-      } else if (pose === 'walk1') {
-        P(5, 18, 4, 9, steelD);
-        P(13, 18, 4, 10, steelD);
-      } else if (pose === 'walk2') {
-        P(7, 18, 4, 8, steelD);
-        P(11, 18, 4, 10, steelD);
-      } else if (pose === 'walk3') {
-        P(6, 18, 4, 10, steelD);
-        P(12, 18, 4, 9, steelD);
-      } else if (pose === 'jump') {
-        P(6, 18, 4, 7, steelD);
-        P(12, 18, 4, 7, steelD);
-      } else {
-        P(7, 18, 4, 10, steelD);
-        P(11, 18, 4, 10, steelD);
-      }
-    };
-
-    frames.forEach((pose, i) => drawKnight(i * FW, pose));
+    });
     tex.refresh();
     frames.forEach((pose, i) => tex.add(pose, 0, i * FW, 0, FW, FH));
   }
@@ -467,6 +694,82 @@ export class BootScene extends Phaser.Scene {
     }
   }
 
+  // ------------------------------------------------------------------ glow
+  /** Textura radial branca genérica, para uso com blendMode ADD (tochas, halos, luar). */
+  private makeGlow() {
+    const { tex, ctx } = this.ctxOf('glow', 64, 64);
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    tex.refresh();
+  }
+
+  // ---------------------------------------------------------------- vitrola
+  private makeVitrola() {
+    // caixa de madeira com corneta dourada
+    {
+      const { tex, ctx } = this.ctxOf('vitrola', 56, 44);
+      // caixa
+      ctx.fillStyle = '#5b3a1e';
+      ctx.fillRect(6, 28, 44, 14);
+      ctx.fillStyle = '#7a5227';
+      ctx.fillRect(6, 26, 44, 4);
+      ctx.fillStyle = '#3d2712';
+      ctx.fillRect(6, 40, 44, 2);
+      // frisos
+      ctx.fillStyle = '#d9a441';
+      ctx.fillRect(8, 33, 40, 1);
+      // corneta (abre para cima e para a esquerda)
+      ctx.fillStyle = '#d9a441';
+      ctx.beginPath();
+      ctx.moveTo(34, 27);
+      ctx.quadraticCurveTo(30, 16, 14, 8);
+      ctx.lineTo(8, 2);
+      ctx.lineTo(28, 2);
+      ctx.quadraticCurveTo(36, 12, 38, 26);
+      ctx.closePath();
+      ctx.fill();
+      // boca da corneta
+      ctx.fillStyle = '#ffc24d';
+      ctx.beginPath();
+      ctx.ellipse(18, 5, 11, 4, -0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#7a5227';
+      ctx.beginPath();
+      ctx.ellipse(18, 5, 6, 2, -0.35, 0, Math.PI * 2);
+      ctx.fill();
+      // manivela
+      ctx.fillStyle = '#aeb8e8';
+      ctx.fillRect(50, 31, 4, 2);
+      ctx.fillRect(52, 27, 2, 5);
+      tex.refresh();
+    }
+    // disco (gira quando a música toca)
+    {
+      const { tex, ctx } = this.ctxOf('vitrola-disc', 20, 20);
+      ctx.fillStyle = '#1d2136';
+      ctx.beginPath();
+      ctx.arc(10, 10, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#2a2f45';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(10, 10, 6.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#d9a441';
+      ctx.beginPath();
+      ctx.arc(10, 10, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+      // marcador para a rotação ser perceptível
+      ctx.fillStyle = '#f3e6c4';
+      ctx.fillRect(15, 9, 2, 2);
+      tex.refresh();
+    }
+  }
+
   // ---------------------------------------------------------------- diversos
   private makeMisc() {
     // faísca / partícula
@@ -514,6 +817,12 @@ export class BootScene extends Phaser.Scene {
       key: 'candle-flame',
       frames: [{ key: 'candle-lit-0' }, { key: 'candle-lit-1' }],
       frameRate: 5,
+      repeat: -1
+    });
+    this.anims.create({
+      key: 'torch-flame',
+      frames: [{ key: 'torch-flame-0' }, { key: 'torch-flame-1' }],
+      frameRate: 6,
       repeat: -1
     });
   }

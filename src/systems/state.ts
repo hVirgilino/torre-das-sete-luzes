@@ -1,4 +1,13 @@
-import { DifficultyId, DIFFICULTIES, Difficulty, LOCKS_PER_FLOOR } from '../data/config';
+import {
+  DifficultyId,
+  DIFFICULTIES,
+  Difficulty,
+  LOCKS_PER_FLOOR,
+  ResolutionId,
+  TrackId,
+  UI_SCALES
+} from '../data/config';
+import { resetQuestionHistory } from './questions';
 
 const SAVE_KEY = 'cerimonia-da-luz:save:v1';
 const SETTINGS_KEY = 'cerimonia-da-luz:settings:v1';
@@ -26,13 +35,82 @@ export interface Settings {
   musicVolume: number; // 0–1
   sfxVolume: number; // 0–1
   difficulty: DifficultyId;
+  /** faixa da vitrola */
+  track: TrackId;
+  /** resolução de renderização (aplicada ao recarregar) */
+  resolutionId: ResolutionId;
+  /** escala da interface (um dos degraus de UI_SCALES) */
+  uiScale: number;
 }
 
 const defaultSettings: Settings = {
   musicVolume: 0.6,
   sfxVolume: 0.8,
-  difficulty: 'escudeiro'
+  difficulty: 'escudeiro',
+  track: 'festiva',
+  resolutionId: '540',
+  uiScale: 1
 };
+
+const TRACK_IDS: TrackId[] = ['festiva', 'epica', 'taverna'];
+const RESOLUTION_IDS: ResolutionId[] = ['540', '720', '1080', '1440'];
+
+const isDifficultyId = (v: unknown): v is DifficultyId => DIFFICULTIES.some((d) => d.id === v);
+
+const clamp01 = (v: unknown, fallback: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback;
+
+/** Aceita qualquer JSON vindo do storage e devolve settings sempre válidos. */
+function sanitizeSettings(raw: unknown): Settings {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    musicVolume: clamp01(r.musicVolume, defaultSettings.musicVolume),
+    sfxVolume: clamp01(r.sfxVolume, defaultSettings.sfxVolume),
+    difficulty: isDifficultyId(r.difficulty) ? r.difficulty : defaultSettings.difficulty,
+    track: TRACK_IDS.includes(r.track as TrackId) ? (r.track as TrackId) : defaultSettings.track,
+    resolutionId: RESOLUTION_IDS.includes(r.resolutionId as ResolutionId)
+      ? (r.resolutionId as ResolutionId)
+      : defaultSettings.resolutionId,
+    uiScale: UI_SCALES.includes(r.uiScale as (typeof UI_SCALES)[number])
+      ? (r.uiScale as number)
+      : defaultSettings.uiScale
+  };
+}
+
+/**
+ * Valida um save vindo do storage. Estrutura irrecuperável → null (tratado como
+ * "sem save"); valores fora de faixa são corrigidos em vez de derrubar o jogo.
+ */
+function sanitizeSave(raw: unknown): SaveData | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.candles)) return null;
+
+  const candles: CandleState[] = LOCKS_PER_FLOOR.map((max, i) => {
+    const c = (r.candles as unknown[])[i];
+    const cc = (c && typeof c === 'object' ? c : {}) as Record<string, unknown>;
+    const locks =
+      typeof cc.locks === 'number' && Number.isFinite(cc.locks)
+        ? Math.min(max, Math.max(0, Math.round(cc.locks)))
+        : max;
+    return { locks, lit: cc.lit === true };
+  });
+
+  const floor =
+    typeof r.floor === 'number' && Number.isFinite(r.floor)
+      ? Math.min(LOCKS_PER_FLOOR.length + 1, Math.max(1, Math.round(r.floor)))
+      : 1;
+
+  return {
+    playerName: (typeof r.playerName === 'string' ? r.playerName.trim().slice(0, 24) : '') || 'Galahad',
+    difficulty: isDifficultyId(r.difficulty) ? r.difficulty : 'escudeiro',
+    candles,
+    floor,
+    protectionActive: r.protectionActive === true,
+    finished: r.finished === true,
+    updatedAt: typeof r.updatedAt === 'number' && Number.isFinite(r.updatedAt) ? r.updatedAt : Date.now()
+  };
+}
 
 class GameStateManager {
   save: SaveData | null = null;
@@ -47,7 +125,7 @@ class GameStateManager {
   loadSettings() {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) this.settings = { ...defaultSettings, ...JSON.parse(raw) };
+      if (raw) this.settings = sanitizeSettings(JSON.parse(raw));
     } catch {
       /* storage indisponível — segue com padrão em memória */
     }
@@ -69,7 +147,7 @@ class GameStateManager {
   loadSave() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
-      this.save = raw ? (JSON.parse(raw) as SaveData) : null;
+      this.save = raw ? sanitizeSave(JSON.parse(raw)) : null;
     } catch {
       this.save = null;
     }
@@ -89,6 +167,7 @@ class GameStateManager {
       finished: false,
       updatedAt: Date.now()
     };
+    resetQuestionHistory();
     this.persistSave();
   }
 

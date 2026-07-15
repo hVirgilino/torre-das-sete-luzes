@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { FONTS, GAME_HEIGHT, GAME_WIDTH, LOCKS_PER_FLOOR } from '../data/config';
 import { State } from '../systems/state';
 import { makeButton, fadeIn, fadeOut } from '../systems/ui';
+import { initSceneView, uiPx } from '../systems/display';
 
 const isTouch = () => window.matchMedia('(pointer: coarse)').matches;
 
@@ -41,7 +42,7 @@ export class TutorialScene extends Phaser.Scene {
           'Trechos da Cerimônia da Luz surgirão com palavras faltando. Escolha a alternativa que ' +
           'preenche a lacuna corretamente.\n\nCada acerto quebra uma tranca. ' +
           `Errar — ou deixar o tempo acabar — restaura TODAS as trancas daquela vela. ` +
-          `Cada vela tem ${LOCKS_PER_FLOOR[0]} trancas.`
+          `As velas têm de ${Math.min(...LOCKS_PER_FLOOR)} a ${Math.max(...LOCKS_PER_FLOOR)} trancas — quanto mais alto o andar, mais trancas.`
       },
       {
         t: 'As Habilidades',
@@ -60,6 +61,7 @@ export class TutorialScene extends Phaser.Scene {
   }
 
   create() {
+    initSceneView(this);
     this.cameras.main.setBackgroundColor(0x060a1c);
     fadeIn(this, 500);
 
@@ -68,12 +70,12 @@ export class TutorialScene extends Phaser.Scene {
     candle.play('candle-flame');
 
     this.title = this.add
-      .text(GAME_WIDTH / 2, 150, '', { fontFamily: FONTS.display, fontSize: '30px', color: '#ffc24d' })
+      .text(GAME_WIDTH / 2, 150, '', { fontFamily: FONTS.display, fontSize: uiPx(30), color: '#ffc24d' })
       .setOrigin(0.5);
     this.body = this.add
       .text(GAME_WIDTH / 2, 300, '', {
         fontFamily: FONTS.body,
-        fontSize: '21px',
+        fontSize: uiPx(21),
         color: '#f3e6c4',
         align: 'center',
         wordWrap: { width: 700 },

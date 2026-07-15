@@ -3,6 +3,15 @@
 export const GAME_WIDTH = 960;
 export const GAME_HEIGHT = 540;
 
+/** Faixas da vitrola (definidas em data/tracks.ts) */
+export type TrackId = 'festiva' | 'epica' | 'taverna';
+
+/** Resoluções de renderização 16:9 (definidas em systems/display.ts) */
+export type ResolutionId = '540' | '720' | '1080' | '1440';
+
+/** Degraus de escala da interface */
+export const UI_SCALES = [0.8, 1, 1.15, 1.3] as const;
+
 export type DifficultyId = 'escudeiro' | 'iniciatico' | 'demolay' | 'cavaleiro';
 
 export interface Difficulty {
@@ -23,8 +32,8 @@ export const DIFFICULTIES: Difficulty[] = [
   {
     id: 'escudeiro',
     nome: 'Escudeiro',
-    descricao: '10s · 2 opções · poucas palavras',
-    tempo: 10,
+    descricao: '20s · 2 opções · poucas palavras',
+    tempo: 20,
     opcoes: 2,
     lacuna: 'palavra',
     banco: ['vela']
@@ -32,8 +41,8 @@ export const DIFFICULTIES: Difficulty[] = [
   {
     id: 'iniciatico',
     nome: 'Iniciático',
-    descricao: '10s · 3 opções · mais palavras',
-    tempo: 10,
+    descricao: '15s · 3 opções · mais palavras',
+    tempo: 15,
     opcoes: 3,
     lacuna: 'palavras',
     banco: ['vela', 'abertura']
@@ -59,11 +68,10 @@ export const DIFFICULTIES: Difficulty[] = [
 ];
 
 /**
- * Trancas por andar (índice 0 = andar 1).
- * Definido pelo design: 2 trancas por nível.
- * Para escalar por andar, troque por, ex.: [2, 4, 6, 8, 10, 12, 14].
+ * Trancas por andar (índice 0 = andar 1) — progressão crescente: o andar N tem N+1 trancas.
+ * Para outra curva, basta trocar o array, ex.: [2, 4, 6, 8, 10, 12, 14].
  */
-export const LOCKS_PER_FLOOR = [2, 2, 2, 2, 2, 2, 2];
+export const LOCKS_PER_FLOOR = [2, 3, 4, 5, 6, 7, 8];
 
 /** Trancas que retornam ao usar a habilidade daquela vela */
 export const LOCKS_RETURNED_ON_ABILITY = 1;

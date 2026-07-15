@@ -3,6 +3,8 @@ import { FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
 import { State } from '../systems/state';
 import { Audio } from '../systems/audio';
 import { Dialog, fadeIn, fadeOut, wait } from '../systems/ui';
+import { placeCourt, swordSwings } from './cutscene';
+import { initSceneView } from '../systems/display';
 
 export class IntroScene extends Phaser.Scene {
   private dialog!: Dialog;
@@ -12,6 +14,7 @@ export class IntroScene extends Phaser.Scene {
   }
 
   create() {
+    initSceneView(this);
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'bg-throne');
     this.dialog = new Dialog(this);
     fadeIn(this, 800);
@@ -55,23 +58,17 @@ export class IntroScene extends Phaser.Scene {
 
   private async runCutscene() {
     const floorY = 430;
-    // personagens
-    const king = this.add.sprite(510, floorY - 34, 'king').setScale(2.4).setOrigin(0.5, 1);
-    const knight = this.add.sprite(430, floorY, 'knight-sheet', 'kneel').setScale(2.4).setOrigin(0.5, 1);
-    const sword = this.add.sprite(480, floorY - 90, 'sword').setScale(2).setOrigin(0.5, 1).setAngle(-40).setVisible(false);
+    const { king, sword } = placeCourt(this, { floorY });
 
     await wait(this, 900);
 
-    // os três toques da espada
-    sword.setVisible(true);
-    for (let i = 0; i < 3; i++) {
-      this.tweens.add({ targets: sword, angle: -70, duration: 260, ease: 'sine.out', yoyo: true });
-      await wait(this, 280);
-      Audio.sword();
-      this.cameras.main.flash(120, 255, 240, 184);
-      await wait(this, 520);
-    }
-    sword.setVisible(false);
+    // o Rei anuncia a condecoração — os toques de verdade ficam para o final
+    await this.dialog.play([
+      { speaker: 'Rei', text: 'Agora o condecoro Cavaleiro da Guarda Real do Rei.' }
+    ]);
+
+    // um único gesto com a espada, sem os três toques
+    await swordSwings(this, sword, 1, { flash: false, sfx: true });
     await wait(this, 400);
 
     // rei dá as costas e chama Merlin

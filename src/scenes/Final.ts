@@ -4,6 +4,8 @@ import { State } from '../systems/state';
 import { Audio } from '../systems/audio';
 import { Dialog, fadeIn, fadeOut, wait } from '../systems/ui';
 import { makeButton } from '../systems/ui';
+import { placeCourt, swordSwings } from './cutscene';
+import { initSceneView } from '../systems/display';
 
 export class FinalScene extends Phaser.Scene {
   constructor() {
@@ -11,6 +13,7 @@ export class FinalScene extends Phaser.Scene {
   }
 
   create() {
+    initSceneView(this);
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'bg-throne');
     fadeIn(this, 800);
 
@@ -26,10 +29,7 @@ export class FinalScene extends Phaser.Scene {
   private async runCutscene() {
     const dialog = new Dialog(this);
     const floorY = 430;
-    const king = this.add.sprite(510, floorY - 34, 'king').setScale(2.4).setOrigin(0.5, 1);
-    const merlin = this.add.sprite(320, floorY, 'merlin').setScale(2.4).setOrigin(0.5, 1);
-    const knight = this.add.sprite(430, floorY, 'knight-sheet', 'kneel').setScale(2.4).setOrigin(0.5, 1);
-    const sword = this.add.sprite(480, floorY - 90, 'sword').setScale(2).setOrigin(0.5, 1).setAngle(-40).setVisible(false);
+    const { knight, sword } = placeCourt(this, { withMerlin: true, floorY });
 
     const nome = State.save?.playerName ?? 'Cavaleiro';
 
@@ -39,16 +39,8 @@ export class FinalScene extends Phaser.Scene {
       { speaker: 'Rei', text: 'Que se ajoelhe diante da corte.' }
     ]);
 
-    // os três toques
-    sword.setVisible(true);
-    for (let i = 0; i < 3; i++) {
-      this.tweens.add({ targets: sword, angle: -70, duration: 260, ease: 'sine.out', yoyo: true });
-      await wait(this, 280);
-      Audio.sword();
-      this.cameras.main.flash(120, 255, 240, 184);
-      await wait(this, 520);
-    }
-    sword.setVisible(false);
+    // os três toques da espada — a condecoração de verdade
+    await swordSwings(this, sword, 3, { flash: true, sfx: true });
 
     await dialog.play([
       {

@@ -1,5 +1,6 @@
 /**
- * Texto oficial da Cerimônia da Luz (Supremo Conselho DeMolay Brasil, 4ª ed., 2019).
+ * Texto oficial da Cerimônia da Luz (Supremo Conselho DeMolay Brasil, 4ª ed., © 2017),
+ * conferido diretamente contra o PDF-fonte do Supremo Conselho.
  * Estruturado em seções: cada vela tem seu trecho; abertura e encerramento
  * entram no banco de questões conforme a dificuldade.
  */

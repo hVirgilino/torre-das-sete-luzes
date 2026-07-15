@@ -78,6 +78,56 @@ function extractSpan(ws: string[], n: number): { start: number; span: string } |
 /** normaliza para comparação de distratores */
 const norm = (s: string) => clean(s).replace(/\s+/g, ' ');
 
+// ------------------------------------------------- memória anti-repetição
+// O banco de textos é curto (poucas sentenças por vela), então a memória é
+// pequena e sempre libera as entradas mais antigas quando o pool se esgota —
+// nunca bloqueia a geração de uma questão.
+const RECENT_SENTENCES_CAP = 8;
+const RECENT_SPANS_CAP = 12;
+let recentSentences: string[] = [];
+let recentSpans: string[] = [];
+
+/** Reinicia a memória de repetição — chamar ao começar um novo jogo. */
+export function resetQuestionHistory(): void {
+  recentSentences = [];
+  recentSpans = [];
+}
+
+function remember(list: string[], cap: number, entry: string) {
+  list.push(entry);
+  while (list.length > cap) list.shift();
+}
+
+/** escolhe uma sentença evitando as usadas recentemente; libera memória se preciso */
+function pickSentence(sents: string[], sectionId: string): string {
+  const fresh = sents.filter((s) => !recentSentences.includes(`${sectionId}::${norm(s)}`));
+  const pool = fresh.length ? fresh : sents;
+  const chosen = pick(pool);
+  remember(recentSentences, RECENT_SENTENCES_CAP, `${sectionId}::${norm(chosen)}`);
+  return chosen;
+}
+
+/** amostra alguns recortes candidatos e prefere palavras significativas + spans não repetidos */
+function pickSpan(ws: string[], n: number): { start: number; span: string } {
+  const sig = significantIndices(ws);
+  const candidates = sig.filter((i) => i + n <= ws.length);
+  const starts = candidates.length ? candidates : [0];
+
+  let best: { start: number; span: string; score: number } | null = null;
+  const tries = Math.min(4, starts.length);
+  const tried = shuffle(starts).slice(0, tries);
+  for (const start of tried) {
+    const span = ws.slice(start, start + n).join(' ');
+    const sigCount = ws.slice(start, start + n).filter((w) => significantIndices([w]).length > 0).length;
+    const repeatPenalty = recentSpans.includes(norm(span)) ? -3 : 0;
+    const score = sigCount + repeatPenalty + Math.random() * 0.5;
+    if (!best || score > best.score) best = { start, span, score };
+  }
+  const chosen = best ?? { start: 0, span: ws.slice(0, n).join(' '), score: 0 };
+  remember(recentSpans, RECENT_SPANS_CAP, norm(chosen.span));
+  return chosen;
+}
+
 export function generateQuestion(vela: number, difficulty: Difficulty): Question {
   // banco de seções: vela do andar tem prioridade; extras conforme dificuldade
   const velaSection = CEREMONY.find((s) => s.vela === vela)!;
@@ -91,19 +141,22 @@ export function generateQuestion(vela: number, difficulty: Difficulty): Question
   const source = useOwn ? velaSection : pick(extras);
 
   const sents = sentences(source);
-  const sentence = pick(sents);
+  const sentence = pickSentence(sents, source.id);
   const ws = words(sentence);
 
   const n = Math.min(spanLength(difficulty), Math.max(1, ws.length - 3));
-  const extracted = extractSpan(ws, n) ?? { start: 0, span: ws.slice(0, n).join(' ') };
-  const { start, span } = extracted;
+  const { start, span } = pickSpan(ws, n);
 
   const antes = ws.slice(0, start).join(' ');
   const depois = ws.slice(start + n).join(' ');
   const correta = span;
+  // se a lacuna começa a sentença, o preenchimento correto normalmente é maiúsculo
+  const expectsCapital = antes === '' && /^[A-ZÀ-Ý]/.test(correta);
 
-  // distratores: trechos do mesmo tamanho vindos de outras sentenças/seções
-  const distractorPool: string[] = [];
+  // distratores: trechos do mesmo tamanho, priorizando mesmo tier, tamanho
+  // próximo e capitalização compatível (evita denunciar a resposta)
+  interface Candidate { span: string; tier: string; len: number }
+  const distractorPool: Candidate[] = [];
   const poolSections = [velaSection, ...extras, ...otherVelas];
   for (const sec of shuffle(poolSections)) {
     for (const s of shuffle(sentences(sec))) {
@@ -112,15 +165,25 @@ export function generateQuestion(vela: number, difficulty: Difficulty): Question
       if (!alt) continue;
       const candidate = alt.span;
       if (norm(candidate) === norm(correta)) continue;
-      if (distractorPool.some((d) => norm(d) === norm(candidate))) continue;
-      distractorPool.push(candidate);
-      if (distractorPool.length >= 12) break;
+      if (distractorPool.some((d) => norm(d.span) === norm(candidate))) continue;
+      distractorPool.push({ span: candidate, tier: sec.tier, len: words(candidate).length });
+      if (distractorPool.length >= 16) break;
     }
-    if (distractorPool.length >= 12) break;
+    if (distractorPool.length >= 16) break;
   }
 
+  const scoreDistractor = (c: Candidate) => {
+    let s = 0;
+    if (c.tier === source.tier) s += 2;
+    s -= Math.abs(c.len - n);
+    const startsCapital = /^[A-ZÀ-Ý]/.test(c.span);
+    if (startsCapital === expectsCapital) s += 3;
+    return s + Math.random() * 0.75;
+  };
+  const ranked = shuffle(distractorPool).sort((a, b) => scoreDistractor(b) - scoreDistractor(a));
+
   const needed = difficulty.opcoes - 1;
-  const distractors = shuffle(distractorPool).slice(0, needed);
+  const distractors = ranked.slice(0, needed).map((c) => c.span);
   // fallback improvável: completa com variações
   while (distractors.length < needed) {
     distractors.push(shuffle(words(correta)).join(' ') + '…');

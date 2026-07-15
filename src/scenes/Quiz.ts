@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
-import { ABILITIES, FONTS, GAME_HEIGHT, GAME_WIDTH, LOCKS_RETURNED_ON_ABILITY, abilityByVela } from '../data/config';
+import { FONTS, GAME_HEIGHT, GAME_WIDTH, LOCKS_RETURNED_ON_ABILITY, abilityByVela } from '../data/config';
 import { State } from '../systems/state';
 import { Audio } from '../systems/audio';
 import { generateQuestion, Question } from '../systems/questions';
+import { initSceneView, uiPx } from '../systems/display';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 
@@ -39,6 +40,7 @@ export class QuizScene extends Phaser.Scene {
   }
 
   create(data: { vela: number; practice?: boolean }) {
+    initSceneView(this);
     this.vela = data.vela;
     this.practice = !!data.practice;
     this.options = [];
@@ -58,14 +60,14 @@ export class QuizScene extends Phaser.Scene {
 
     // cabeçalho
     this.origemText = this.add
-      .text(GAME_WIDTH / 2, top + 26, '', { fontFamily: FONTS.display, fontSize: '19px', color: '#7a1f1f' })
+      .text(GAME_WIDTH / 2, top + 26, '', { fontFamily: FONTS.display, fontSize: uiPx(19), color: '#7a1f1f' })
       .setOrigin(0.5);
     this.locksText = this.add
-      .text(GAME_WIDTH / 2 - PW / 2 + 18, top + 16, '', { fontFamily: FONTS.body, fontSize: '16px', color: '#5b3a1e' })
+      .text(GAME_WIDTH / 2 - PW / 2 + 18, top + 16, '', { fontFamily: FONTS.body, fontSize: uiPx(16), color: '#5b3a1e' })
       .setOrigin(0, 0);
 
     const retreat = this.add
-      .text(GAME_WIDTH / 2 + PW / 2 - 18, top + 16, '✕ recuar', { fontFamily: FONTS.body, fontSize: '16px', color: '#7a1f1f' })
+      .text(GAME_WIDTH / 2 + PW / 2 - 18, top + 16, '✕ recuar', { fontFamily: FONTS.body, fontSize: uiPx(16), color: '#7a1f1f' })
       .setOrigin(1, 0)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.close());
@@ -86,7 +88,7 @@ export class QuizScene extends Phaser.Scene {
     this.questionText = this.add
       .text(GAME_WIDTH / 2, top + 130, '', {
         fontFamily: FONTS.body,
-        fontSize: '21px',
+        fontSize: uiPx(21),
         color: '#2c1c08',
         align: 'center',
         wordWrap: { width: PW - 90 },
@@ -94,7 +96,7 @@ export class QuizScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.hintText = this.add
-      .text(GAME_WIDTH / 2, top + 205, '', { fontFamily: FONTS.body, fontSize: '17px', fontStyle: 'italic', color: '#27408b' })
+      .text(GAME_WIDTH / 2, top + 205, '', { fontFamily: FONTS.body, fontSize: uiPx(17), fontStyle: 'italic', color: '#27408b' })
       .setOrigin(0.5);
 
     // alternativas (2 colunas)
@@ -108,7 +110,7 @@ export class QuizScene extends Phaser.Scene {
       const text = this.add
         .text(-optW / 2 + 14, 0, '', {
           fontFamily: FONTS.body,
-          fontSize: '17px',
+          fontSize: uiPx(17),
           color: '#2c1c08',
           wordWrap: { width: optW - 28 }
         })
@@ -132,14 +134,14 @@ export class QuizScene extends Phaser.Scene {
     // feedback
     this.feedback = this.add
       .text(GAME_WIDTH / 2, top + PH - 78, '', {
-        fontFamily: FONTS.display, fontSize: '22px', color: '#7a1f1f', align: 'center'
+        fontFamily: FONTS.display, fontSize: uiPx(22), color: '#7a1f1f', align: 'center'
       })
       .setOrigin(0.5);
 
     // barra de habilidades
     this.buildAbilityBar(top + PH - 34);
     this.buffIcons = this.add
-      .text(GAME_WIDTH / 2 + PW / 2 - 18, top + PH - 60, '', { fontFamily: FONTS.body, fontSize: '15px', color: '#27408b' })
+      .text(GAME_WIDTH / 2 + PW / 2 - 18, top + PH - 60, '', { fontFamily: FONTS.body, fontSize: uiPx(15), color: '#27408b' })
       .setOrigin(1, 0.5);
 
     // timer loop
@@ -153,7 +155,7 @@ export class QuizScene extends Phaser.Scene {
     if (this.practice) {
       this.add
         .text(GAME_WIDTH / 2, y, 'Treino de Merlin — sem consequências', {
-          fontFamily: FONTS.body, fontSize: '15px', fontStyle: 'italic', color: '#5b3a1e'
+          fontFamily: FONTS.body, fontSize: uiPx(15), fontStyle: 'italic', color: '#5b3a1e'
         })
         .setOrigin(0.5);
       return;
@@ -162,7 +164,7 @@ export class QuizScene extends Phaser.Scene {
       const x = GAME_WIDTH / 2 - 7 * 46 / 2 + (v - 1) * 46 + 23;
       const icon = this.add.sprite(0, -4, 'candle-unlit').setScale(0.9);
       const num = this.add
-        .text(0, 16, `${v}`, { fontFamily: FONTS.display, fontSize: '13px', color: '#5b3a1e' })
+        .text(0, 16, `${v}`, { fontFamily: FONTS.display, fontSize: uiPx(13), color: '#5b3a1e' })
         .setOrigin(0.5);
       const c = this.add.container(x, y, [icon, num]);
       c.setSize(40, 46).setInteractive({ useHandCursor: true });
@@ -202,6 +204,13 @@ export class QuizScene extends Phaser.Scene {
 
   private currentHint = '';
 
+  /** alternativas falsas ainda em jogo (visíveis e não desabilitadas) */
+  private visibleWrongOptions(): OptionButton[] {
+    return this.options.filter(
+      (o) => o.container.visible && !o.disabled && o.index !== this.question.indiceCorreta
+    );
+  }
+
   private useAbility(vela: number) {
     if (this.practice || this.locked) return;
     const c = State.candle(vela);
@@ -215,7 +224,7 @@ export class QuizScene extends Phaser.Scene {
     switch (ab.id) {
       case 'eliminarFalsa': {
         apply();
-        const wrongs = this.options.filter((o) => o.container.visible && !o.disabled && o.index !== this.question.indiceCorreta);
+        const wrongs = this.visibleWrongOptions();
         if (wrongs.length) this.disableOption(wrongs[Math.floor(Math.random() * wrongs.length)]);
         break;
       }
@@ -226,7 +235,7 @@ export class QuizScene extends Phaser.Scene {
         this.currentHint = `A lacuna começa com: «${revealed}»`;
         this.hintText.setText(this.currentHint);
         // encurta uma alternativa falsa
-        const wrongs = this.options.filter((o) => o.container.visible && !o.disabled && o.index !== this.question.indiceCorreta);
+        const wrongs = this.visibleWrongOptions();
         if (wrongs.length) {
           const t = wrongs[Math.floor(Math.random() * wrongs.length)];
           const ws = t.text.text.split(' ');

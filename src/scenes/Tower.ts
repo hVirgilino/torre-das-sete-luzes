@@ -3,6 +3,7 @@ import { FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
 import { State } from '../systems/state';
 import { Audio } from '../systems/audio';
 import { fadeIn, fadeOut } from '../systems/ui';
+import { renderScale, uiPx } from '../systems/display';
 
 const FLOOR_H = 160;
 const FLOORS = 8;
@@ -18,6 +19,8 @@ interface Station {
   candle: Phaser.GameObjects.Sprite;
   locksRow: Phaser.GameObjects.Container;
   label: Phaser.GameObjects.Text;
+  halo: Phaser.GameObjects.Image;
+  haloTween?: Phaser.Tweens.Tween;
 }
 
 export class TowerScene extends Phaser.Scene {
@@ -38,6 +41,10 @@ export class TowerScene extends Phaser.Scene {
   private touchState = { left: false, right: false, up: false, down: false };
   private actionBtn?: Phaser.GameObjects.Container;
   private busy = false;
+  private lastStepSound = 0;
+  private worldLayer!: Phaser.GameObjects.Layer;
+  private hudLayer!: Phaser.GameObjects.Layer;
+  private hudCam!: Phaser.Cameras.Scene2D.Camera;
 
   constructor() {
     super('Tower');
@@ -54,20 +61,75 @@ export class TowerScene extends Phaser.Scene {
     this.climbing = false;
     this.busy = false;
 
+    // camadas separadas: mundo rola com o jogador, HUD fica fixo na tela —
+    // necessário porque setScrollFactor(0) não funciona sob zoom de câmera
+    // (as resoluções >540p aplicam zoom na câmera principal)
+    this.worldLayer = this.add.layer();
+    this.hudLayer = this.add.layer();
+
+    const k = renderScale();
+    this.cameras.main.setZoom(k);
     this.physics.world.setBounds(0, 0, GAME_WIDTH, WORLD_H);
     this.cameras.main.setBounds(0, 0, GAME_WIDTH, WORLD_H);
     this.cameras.main.setBackgroundColor(0x11142a);
 
-    // parede de fundo
-    this.add.tileSprite(GAME_WIDTH / 2, WORLD_H / 2, GAME_WIDTH, WORLD_H, 'wall').setAlpha(0.9);
-    // tochas ambiente
+    // parede distante (paralaxe) + parede de fundo
+    const farWall = this.add
+      .tileSprite(GAME_WIDTH / 2, WORLD_H / 2, GAME_WIDTH, WORLD_H, 'wall')
+      .setAlpha(0.5)
+      .setTint(0x1c2038)
+      .setScrollFactor(1, 0.5);
+    this.worldLayer.add(farWall);
+    this.worldLayer.add(this.add.tileSprite(GAME_WIDTH / 2, WORLD_H / 2, GAME_WIDTH, WORLD_H, 'wall').setAlpha(0.9));
+
+    // tochas ambiente com halo tremeluzente e brasas subindo
     for (let n = 0; n <= 7; n++) {
       const y = this.floorY(n) - 90;
       for (const x of [200, 760]) {
-        const t = this.add.sprite(x, y, 'candle-lit-0').setScale(1).setAlpha(0.55);
-        t.play({ key: 'candle-flame', delay: (n * 137) % 400 });
+        const torch = this.add.sprite(x, y, 'torch-flame-0').setScale(1.6);
+        torch.play({ key: 'torch-flame', delay: (n * 137) % 400 });
+        const halo = this.add
+          .image(x, y - 4, 'glow')
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setTint(0xff8a3c)
+          .setScale(0.7)
+          .setAlpha(0.5);
+        this.tweens.add({
+          targets: halo,
+          alpha: { from: 0.35, to: 0.7 },
+          scale: { from: 0.6, to: 0.85 },
+          duration: 500 + Math.random() * 400,
+          yoyo: true,
+          repeat: -1,
+          ease: 'sine.inout',
+          delay: Math.random() * 300
+        });
+        const embers = this.add.particles(x, y - 8, 'spark', {
+          speed: { min: 4, max: 14 },
+          angle: { min: 260, max: 280 },
+          lifespan: 1400,
+          frequency: 900 + Math.random() * 400,
+          alpha: { start: 0.5, end: 0 },
+          scale: { start: 0.8, end: 0.1 },
+          tint: 0xff8a3c
+        });
+        this.worldLayer.add([torch, halo, embers]);
       }
     }
+
+    // poeira flutuando na torre inteira
+    const dust = this.add.particles(GAME_WIDTH / 2, WORLD_H / 2, 'spark', {
+      x: { min: 0, max: GAME_WIDTH },
+      y: { min: 0, max: WORLD_H },
+      speedY: { min: -6, max: -2 },
+      speedX: { min: -3, max: 3 },
+      lifespan: 6000,
+      frequency: 400,
+      alpha: { start: 0.12, end: 0 },
+      scale: { start: 0.6, end: 1.2 },
+      tint: 0x8890b8
+    });
+    this.worldLayer.add(dust);
 
     const platforms = this.physics.add.staticGroup();
     const addPlatform = (x1: number, x2: number, topY: number) => {
@@ -76,6 +138,7 @@ export class TowerScene extends Phaser.Scene {
       const seg = this.add.tileSprite(x1 + w / 2, topY + 12, w, 24, 'floor');
       platforms.add(seg);
       (seg.body as Phaser.Physics.Arcade.StaticBody).setSize(w, 24);
+      this.worldLayer.add(seg);
     };
 
     // chão térreo
@@ -94,7 +157,7 @@ export class TowerScene extends Phaser.Scene {
       const lx = g1 + 40;
       const bottom = this.floorY(n - 1);
       const h = bottom - y;
-      this.add.tileSprite(lx, y + h / 2 + 12, 32, h, 'ladder');
+      this.worldLayer.add(this.add.tileSprite(lx, y + h / 2 + 12, 32, h, 'ladder'));
       const zone = this.add.zone(lx, y + h / 2, 44, h + 24);
       this.physics.add.existing(zone, true);
       this.ladders.push(zone);
@@ -114,17 +177,23 @@ export class TowerScene extends Phaser.Scene {
     this.tweens.add({ targets: this.gate, alpha: 0.65, yoyo: true, repeat: -1, duration: 900 });
     this.gateBody = this.physics.add.staticImage(gx, gy + 60, 'px').setVisible(false);
     (this.gateBody.body as Phaser.Physics.Arcade.StaticBody).setSize(72, 130);
-    this.add
-      .text(gx, gy - 20, 'As sete luzes\nabrem o caminho', {
-        fontFamily: FONTS.body, fontSize: '14px', color: '#ffc24d', align: 'center'
-      })
-      .setOrigin(0.5);
+    this.worldLayer.add(this.gate);
+    this.worldLayer.add(
+      this.add
+        .text(gx, gy - 20, 'As sete luzes\nabrem o caminho', {
+          fontFamily: FONTS.body, fontSize: uiPx(14), color: '#ffc24d', align: 'center'
+        })
+        .setOrigin(0.5)
+    );
 
     // o Rei no 8º andar
     this.king = this.add.sprite(480, this.floorY(8), 'king').setScale(2.4).setOrigin(0.5, 1);
-    this.add
-      .text(480, this.floorY(8) - 96, 'O Rei', { fontFamily: FONTS.display, fontSize: '15px', color: '#d9a441' })
-      .setOrigin(0.5);
+    this.worldLayer.add(this.king);
+    this.worldLayer.add(
+      this.add
+        .text(480, this.floorY(8) - 96, 'O Rei', { fontFamily: FONTS.display, fontSize: uiPx(15), color: '#d9a441' })
+        .setOrigin(0.5)
+    );
 
     // jogador
     const spawnFloor = Math.min(State.save!.floor ?? 1, 7);
@@ -134,6 +203,7 @@ export class TowerScene extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.physics.add.collider(this.player, platforms, undefined, () => !this.climbing);
     this.physics.add.collider(this.player, this.gateBody, undefined, () => !State.allLit);
+    this.worldLayer.add(this.player);
 
     this.cameras.main.startFollow(this.player, false, 0.12, 0.12);
 
@@ -146,7 +216,15 @@ export class TowerScene extends Phaser.Scene {
     this.buildHUD();
     if (isTouch()) this.buildTouchControls();
 
+    // câmera de HUD: fixa no mundo lógico 960×540, não segue o jogador
+    this.hudCam = this.cameras.add(0, 0);
+    this.hudCam.setZoom(k).centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    this.hudCam.ignore(this.worldLayer);
+    this.cameras.main.ignore(this.hudLayer);
+
     fadeIn(this, 500);
+    this.hudCam.fadeIn(500, 4, 6, 18);
+    Audio.ambientStart();
 
     this.events.off('resume');
     this.events.on('resume', () => {
@@ -163,16 +241,23 @@ export class TowerScene extends Phaser.Scene {
   // ------------------------------------------------------------- estações
   private buildStation(vela: number, x: number, floorTopY: number) {
     const y = floorTopY;
+    const halo = this.add
+      .image(x, y - 48, 'glow')
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(0xffc24d)
+      .setScale(0)
+      .setAlpha(0);
     const pedestal = this.add.image(x, y - 18, 'pedestal');
     const candle = this.add.sprite(x, y - 48, 'candle-unlit').setScale(1.6);
     const locksRow = this.add.container(x, y - 92);
     const label = this.add
-      .text(x, y - 118, `Vela ${vela}`, { fontFamily: FONTS.display, fontSize: '14px', color: '#aeb8e8' })
+      .text(x, y - 118, `Vela ${vela}`, { fontFamily: FONTS.display, fontSize: uiPx(14), color: '#aeb8e8' })
       .setOrigin(0.5);
     pedestal.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (this.nearStation?.vela === vela) this.tryInteract();
     });
-    const st: Station = { vela, x, y, pedestal, candle, locksRow, label };
+    this.worldLayer.add([halo, pedestal, candle, locksRow, label]);
+    const st: Station = { vela, x, y, pedestal, candle, locksRow, label, halo };
     this.stations.push(st);
     this.refreshStation(st);
   }
@@ -188,16 +273,39 @@ export class TowerScene extends Phaser.Scene {
         st.locksRow.add(lock);
       }
       st.label.setColor('#aeb8e8');
+      this.setStationHalo(st, false);
     } else {
       st.candle.setVisible(true);
       if (c.lit) {
         st.candle.play('candle-flame', true);
         st.label.setColor('#ffc24d');
+        this.setStationHalo(st, true);
       } else {
         st.candle.stop();
         st.candle.setTexture('candle-unlit');
         st.label.setColor('#dcc494');
+        this.setStationHalo(st, false);
       }
+    }
+  }
+
+  /** poça de luz permanente sobre as velas acesas */
+  private setStationHalo(st: Station, on: boolean) {
+    if (on && !st.haloTween) {
+      st.halo.setScale(1.5).setAlpha(0.35);
+      st.haloTween = this.tweens.add({
+        targets: st.halo,
+        alpha: { from: 0.35, to: 0.6 },
+        scale: { from: 1.4, to: 1.8 },
+        duration: 1400,
+        yoyo: true,
+        repeat: -1,
+        ease: 'sine.inout'
+      });
+    } else if (!on && st.haloTween) {
+      st.haloTween.stop();
+      st.haloTween = undefined;
+      st.halo.setScale(0).setAlpha(0);
     }
   }
 
@@ -214,47 +322,53 @@ export class TowerScene extends Phaser.Scene {
 
   // ------------------------------------------------------------------ HUD
   private buildHUD() {
+    const vignette = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'vignette').setAlpha(0.4).setDepth(890);
+    this.hudLayer.add(vignette);
+
     const hudBg = this.add
       .image(GAME_WIDTH / 2, 26, 'px')
       .setDisplaySize(GAME_WIDTH, 52)
       .setTint(0x060a1c)
       .setAlpha(0.75)
-      .setScrollFactor(0)
       .setDepth(900);
+    this.hudLayer.add(hudBg);
 
     for (let v = 1; v <= 7; v++) {
       const icon = this.add.sprite(0, 0, 'candle-unlit').setScale(1);
       const count = this.add
-        .text(0, 18, '', { fontFamily: FONTS.body, fontSize: '13px', color: '#f3e6c4' })
+        .text(0, 18, '', { fontFamily: FONTS.body, fontSize: uiPx(13), color: '#f3e6c4' })
         .setOrigin(0.5);
-      const c = this.add.container(24 + v * 44, 22, [icon, count]).setScrollFactor(0).setDepth(901);
+      const c = this.add.container(24 + v * 44, 22, [icon, count]).setDepth(901);
+      this.hudLayer.add(c);
       this.hudCandles.push(c);
     }
     this.floorText = this.add
-      .text(GAME_WIDTH - 130, 16, '', { fontFamily: FONTS.display, fontSize: '16px', color: '#f3e6c4' })
-      .setScrollFactor(0)
+      .text(GAME_WIDTH - 130, 16, '', { fontFamily: FONTS.display, fontSize: uiPx(16), color: '#f3e6c4' })
       .setDepth(901);
+    this.hudLayer.add(this.floorText);
     const menuBtn = this.add
-      .text(GAME_WIDTH - 24, 16, '☰', { fontFamily: FONTS.display, fontSize: '22px', color: '#ffc24d' })
+      .text(GAME_WIDTH - 24, 16, '☰', { fontFamily: FONTS.display, fontSize: uiPx(22), color: '#ffc24d' })
       .setOrigin(1, 0)
-      .setScrollFactor(0)
       .setDepth(901)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', async () => {
         State.persistSave();
+        Audio.ambientStop();
         await fadeOut(this, 400);
+        this.hudCam.fadeOut(400, 4, 6, 18);
         this.scene.start('Menu');
       });
+    this.hudLayer.add(menuBtn);
 
     this.promptText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 110, '', {
-        fontFamily: FONTS.body, fontSize: '18px', color: '#ffc24d',
+        fontFamily: FONTS.body, fontSize: uiPx(18), color: '#ffc24d',
         backgroundColor: 'rgba(6,10,28,0.8)', padding: { x: 12, y: 6 }
       })
       .setOrigin(0.5)
-      .setScrollFactor(0)
       .setDepth(902)
       .setVisible(false);
+    this.hudLayer.add(this.promptText);
 
     this.refreshHUD();
   }
@@ -282,9 +396,10 @@ export class TowerScene extends Phaser.Scene {
     const mk = (x: number, y: number, label: string, key: keyof typeof this.touchState | 'action') => {
       const bg = this.add.image(0, 0, 'px').setDisplaySize(74, 74).setTint(0x14182e).setAlpha(0.7);
       const tx = this.add
-        .text(0, 0, label, { fontFamily: FONTS.display, fontSize: '30px', color: '#f3e6c4' })
+        .text(0, 0, label, { fontFamily: FONTS.display, fontSize: uiPx(30), color: '#f3e6c4' })
         .setOrigin(0.5);
-      const c = this.add.container(x, y, [bg, tx]).setScrollFactor(0).setDepth(950);
+      const c = this.add.container(x, y, [bg, tx]).setDepth(950);
+      this.hudLayer.add(c);
       c.setSize(74, 74).setInteractive();
       if (key === 'action') {
         c.on('pointerdown', () => this.tryInteract());
@@ -309,6 +424,7 @@ export class TowerScene extends Phaser.Scene {
     if (this.nearKing && State.allLit) {
       this.busy = true;
       State.persistSave();
+      Audio.ambientStop();
       fadeOut(this, 600).then(() => this.scene.start('Final'));
       return;
     }
@@ -317,9 +433,20 @@ export class TowerScene extends Phaser.Scene {
     if (c.locks > 0) {
       this.openQuiz(this.nearStation.vela, false);
     } else if (!c.lit) {
-      State.lightCandle(this.nearStation.vela);
+      const st = this.nearStation;
+      State.lightCandle(st.vela);
       Audio.candleLight();
       this.cameras.main.flash(200, 255, 194, 77);
+      const burst = this.add.particles(st.x, st.y - 48, 'spark', {
+        speed: { min: 40, max: 120 },
+        lifespan: 600,
+        quantity: 18,
+        scale: { start: 1.4, end: 0 },
+        tint: 0xffc24d,
+        emitting: false
+      });
+      this.worldLayer.add(burst);
+      burst.explode(18);
       this.refreshStations();
       this.refreshHUD();
       this.refreshGate();
@@ -359,19 +486,21 @@ export class TowerScene extends Phaser.Scene {
       }
     }
 
+    const now = this.time.now;
     if (onLadder && (up || down || this.climbing)) {
       this.climbing = true;
       body.setAllowGravity(false);
       body.setVelocityX(left ? -120 : right ? 120 : 0);
       body.setVelocityY(up ? -140 : down ? 140 : 0);
-      if (up || down) this.player.play('knight-climb', true);
-      else this.player.anims.pause();
-      if (!onLadder) this.climbing = false;
+      if (up || down) {
+        this.player.play('knight-climb', true);
+        if (now - this.lastStepSound > 220) {
+          Audio.climb();
+          this.lastStepSound = now;
+        }
+      } else this.player.anims.pause();
     } else {
-      if (this.climbing) {
-        this.climbing = false;
-        body.setAllowGravity(true);
-      }
+      this.climbing = false;
       body.setAllowGravity(true);
       const speed = 210;
       if (left) {
@@ -387,13 +516,17 @@ export class TowerScene extends Phaser.Scene {
         body.setVelocityY(-360);
         Audio.jump();
       }
-      if (!body.blocked.down) this.player.play('knight-jump', true);
-      else if (left || right) this.player.play('knight-walk', true);
-      else this.player.play('knight-idle', true);
-    }
-    if (!onLadder && this.climbing) {
-      this.climbing = false;
-      body.setAllowGravity(true);
+      if (!body.blocked.down) {
+        this.player.play('knight-jump', true);
+      } else if (left || right) {
+        this.player.play('knight-walk', true);
+        if (now - this.lastStepSound > 260) {
+          Audio.footstep();
+          this.lastStepSound = now;
+        }
+      } else {
+        this.player.play('knight-idle', true);
+      }
     }
 
     // andar atual + persistência leve
