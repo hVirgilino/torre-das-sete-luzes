@@ -18,8 +18,10 @@ export class TutorialScene extends Phaser.Scene {
 
   private pages(): Array<{ t: string; b: string }> {
     const move = isTouch()
-      ? 'Use os botões ◀ ▶ para andar, ⬆ para pular e subir escadas, e toque em ✦ para interagir.'
-      : 'Use as SETAS ou WASD para andar e subir escadas, ESPAÇO para pular e E para interagir.';
+      ? 'Use os botões ◀ ▶ para andar, ⬆ para pular e subir escadas, ⬇ para descer pelo vão, ' +
+        'e toque em ✦ para interagir. Os botões funcionam ao mesmo tempo — dá para correr e pular juntos.'
+      : 'Use as SETAS ou WASD para andar e subir escadas, ↓ para descer pelo vão, ' +
+        'ESPAÇO para pular e E para interagir.';
     return [
       {
         t: 'A Queda',

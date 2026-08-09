@@ -11,6 +11,36 @@ const WORLD_H = FLOORS * FLOOR_H + 300;
 const GROUND_Y = WORLD_H - 60; // topo do chão térreo
 const isTouch = () => window.matchMedia('(pointer: coarse)').matches;
 
+// ------------------------------------------------------------ movimentação
+const RUN_SPEED = 230;
+/** o cavaleiro ganha impulso no ar: o salto cobre um vão bem mais largo */
+const AIR_SPEED = 300;
+const JUMP_VELOCITY = -400;
+const CLIMB_SPEED = 150;
+/** margem acima do piso onde a escada ainda é agarrável (para sair no topo) */
+const LADDER_TOP_MARGIN = 44;
+
+// --------------------------------------------------------- controles touch
+const BTN_SIZE = 108;
+/** área tocável é maior que o desenho — dedo grosso, botão perdoa */
+const BTN_PAD = 14;
+type TouchDir = 'left' | 'right' | 'up' | 'down';
+
+interface TouchButton {
+  key: TouchDir;
+  x: number;
+  y: number;
+  hw: number;
+  hh: number;
+  bg: Phaser.GameObjects.Image;
+}
+
+interface Ladder {
+  zone: Phaser.GameObjects.Zone;
+  /** y do piso onde a escada desemboca — o jogador para em pé aqui */
+  topY: number;
+}
+
 interface Station {
   vela: number;
   x: number;
@@ -27,8 +57,12 @@ export class TowerScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>;
-  private ladders!: Phaser.GameObjects.Zone[];
+  private ladders!: Ladder[];
   private climbing = false;
+  /** tampas invisíveis dos vãos das escadas — atravessáveis só apertando ↓ */
+  private gapPlatforms!: Phaser.Physics.Arcade.StaticGroup;
+  private wantDown = false;
+  private prevUp = false;
   private stations: Station[] = [];
   private nearStation: Station | null = null;
   private nearKing = false;
@@ -39,6 +73,7 @@ export class TowerScene extends Phaser.Scene {
   private floorText!: Phaser.GameObjects.Text;
   private promptText!: Phaser.GameObjects.Text;
   private touchState = { left: false, right: false, up: false, down: false };
+  private touchButtons: TouchButton[] = [];
   private actionBtn?: Phaser.GameObjects.Container;
   private busy = false;
   private lastStepSound = 0;
@@ -58,8 +93,11 @@ export class TowerScene extends Phaser.Scene {
     if (!State.save) State.newGame('');
     this.stations = [];
     this.hudCandles = [];
+    this.touchButtons = [];
     this.climbing = false;
     this.busy = false;
+    this.wantDown = false;
+    this.prevUp = false;
 
     // camadas separadas: mundo rola com o jogador, HUD fica fixo na tela —
     // necessário porque setScrollFactor(0) não funciona sob zoom de câmera
@@ -146,6 +184,7 @@ export class TowerScene extends Phaser.Scene {
 
     // andares 1–8 com vão para a escada (alterna esquerda/direita)
     this.ladders = [];
+    this.gapPlatforms = this.physics.add.staticGroup();
     for (let n = 1; n <= FLOORS; n++) {
       const y = this.floorY(n);
       const gapLeft = n % 2 === 1;
@@ -153,14 +192,28 @@ export class TowerScene extends Phaser.Scene {
       const g2 = g1 + 70;
       addPlatform(0, g1, y);
       addPlatform(g2, GAME_WIDTH, y);
+
+      // tampa invisível do vão: quem termina a subida fica de pé aqui e só
+      // desce apertando ↓ (plataforma de sentido único, colide só por cima)
+      const cap = this.add.zone(g1 + (g2 - g1) / 2, y + 6, g2 - g1, 12);
+      this.physics.add.existing(cap, true);
+      const capBody = cap.body as Phaser.Physics.Arcade.StaticBody;
+      capBody.checkCollision.down = false;
+      capBody.checkCollision.left = false;
+      capBody.checkCollision.right = false;
+      this.gapPlatforms.add(cap);
+
       // escada do andar n-1 até n, dentro do vão
       const lx = g1 + 40;
       const bottom = this.floorY(n - 1);
       const h = bottom - y;
       this.worldLayer.add(this.add.tileSprite(lx, y + h / 2 + 12, 32, h, 'ladder'));
-      const zone = this.add.zone(lx, y + h / 2, 44, h + 24);
+      // a zona sobe acima do piso para o jogador conseguir emergir do vão
+      const zTop = y - LADDER_TOP_MARGIN;
+      const zBottom = bottom + 12;
+      const zone = this.add.zone(lx, (zTop + zBottom) / 2, 44, zBottom - zTop);
       this.physics.add.existing(zone, true);
-      this.ladders.push(zone);
+      this.ladders.push({ zone, topY: y });
     }
 
     // estações das velas — andares 1 a 7, posições variadas
@@ -203,11 +256,20 @@ export class TowerScene extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.physics.add.collider(this.player, platforms, undefined, () => !this.climbing);
     this.physics.add.collider(this.player, this.gateBody, undefined, () => !State.allLit);
+    // tampa do vão: só segura quem está caindo/parado sobre ela e não pede ↓
+    this.physics.add.collider(this.player, this.gapPlatforms, undefined, (_p, cap) => {
+      if (this.climbing || this.wantDown) return false;
+      const body = this.player.body as Phaser.Physics.Arcade.Body;
+      const capBody = (cap as unknown as Phaser.GameObjects.Zone)
+        .body as Phaser.Physics.Arcade.StaticBody;
+      return body.velocity.y >= 0 && body.prev.y + body.height <= capBody.position.y + 4;
+    });
     this.worldLayer.add(this.player);
 
     this.cameras.main.startFollow(this.player, false, 0.12, 0.12);
 
-    // input
+    // input — 4 toques simultâneos (andar + subir + agir ao mesmo tempo)
+    this.input.addPointer(3);
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,E') as any;
     this.input.keyboard!.on('keydown-E', () => this.tryInteract());
@@ -360,8 +422,9 @@ export class TowerScene extends Phaser.Scene {
       });
     this.hudLayer.add(menuBtn);
 
+    // no touch o prompt sobe: os direcionais ocupam a faixa de baixo
     this.promptText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 110, '', {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - (isTouch() ? 210 : 110), '', {
         fontFamily: FONTS.body, fontSize: uiPx(18), color: '#ffc24d',
         backgroundColor: 'rgba(6,10,28,0.8)', padding: { x: 12, y: 6 }
       })
@@ -393,29 +456,61 @@ export class TowerScene extends Phaser.Scene {
 
   // ----------------------------------------------------------- touch controls
   private buildTouchControls() {
-    const mk = (x: number, y: number, label: string, key: keyof typeof this.touchState | 'action') => {
-      const bg = this.add.image(0, 0, 'px').setDisplaySize(74, 74).setTint(0x14182e).setAlpha(0.7);
+    const mk = (x: number, y: number, size: number, label: string, key: TouchDir | 'action') => {
+      const bg = this.add
+        .image(0, 0, 'px')
+        .setDisplaySize(size, size)
+        .setTint(0x14182e)
+        .setAlpha(0.62);
       const tx = this.add
-        .text(0, 0, label, { fontFamily: FONTS.display, fontSize: uiPx(30), color: '#f3e6c4' })
+        .text(0, 0, label, { fontFamily: FONTS.display, fontSize: uiPx(size * 0.42), color: '#f3e6c4' })
         .setOrigin(0.5);
       const c = this.add.container(x, y, [bg, tx]).setDepth(950);
       this.hudLayer.add(c);
-      c.setSize(74, 74).setInteractive();
       if (key === 'action') {
+        // botão discreto: um toque = uma ação, tratado por evento
+        c.setSize(size, size).setInteractive();
         c.on('pointerdown', () => this.tryInteract());
       } else {
-        c.on('pointerdown', () => (this.touchState[key] = true));
-        c.on('pointerup', () => (this.touchState[key] = false));
-        c.on('pointerout', () => (this.touchState[key] = false));
+        // direcionais são lidos por varredura de ponteiros em pollTouch(),
+        // não por eventos — assim vários botões ficam pressionados ao mesmo tempo
+        this.touchButtons.push({ key, x, y, hw: size / 2 + BTN_PAD, hh: size / 2 + BTN_PAD, bg });
       }
       return c;
     };
-    mk(58, GAME_HEIGHT - 58, '◀', 'left');
-    mk(146, GAME_HEIGHT - 58, '▶', 'right');
-    mk(GAME_WIDTH - 58, GAME_HEIGHT - 58, '⬆', 'up');
-    mk(GAME_WIDTH - 58, GAME_HEIGHT - 146, '⬇', 'down');
-    this.actionBtn = mk(GAME_WIDTH - 150, GAME_HEIGHT - 58, '✦', 'action');
+    // o espaçamento é ≥ 2·BTN_PAD para as áreas tocáveis não se sobreporem
+    const S = BTN_SIZE;
+    const GAP = BTN_PAD * 2;
+    const bottom = GAME_HEIGHT - S / 2 - 16;
+    mk(S / 2 + 16, bottom, S, '◀', 'left');
+    mk(S / 2 + 16 + S + GAP, bottom, S, '▶', 'right');
+    mk(GAME_WIDTH - S / 2 - 16, bottom - S - GAP, S, '⬆', 'up');
+    mk(GAME_WIDTH - S / 2 - 16, bottom, S, '⬇', 'down');
+    this.actionBtn = mk(GAME_WIDTH - S - 16 - S / 2 - GAP, bottom, S, '✦', 'action');
     this.actionBtn.setVisible(false);
+  }
+
+  /**
+   * Lê todos os ponteiros ativos contra as áreas dos botões. Percorrer os
+   * ponteiros (em vez de ouvir pointerdown/up por botão) é o que permite
+   * multitoque real: segurar ▶ e apertar ⬆ ao mesmo tempo, arrastar o dedo
+   * de um direcional para o outro sem soltar.
+   */
+  private pollTouch() {
+    if (!this.touchButtons.length) return;
+    const next = { left: false, right: false, up: false, down: false };
+    for (const p of this.input.manager.pointers) {
+      if (!p.isDown) continue;
+      const wp = this.hudCam.getWorldPoint(p.x, p.y);
+      for (const b of this.touchButtons) {
+        if (Math.abs(wp.x - b.x) <= b.hw && Math.abs(wp.y - b.y) <= b.hh) next[b.key] = true;
+      }
+    }
+    this.touchState = next;
+    for (const b of this.touchButtons) {
+      const on = next[b.key];
+      b.bg.setAlpha(on ? 0.9 : 0.62).setTint(on ? 0x3a4472 : 0x14182e);
+    }
   }
 
   // ------------------------------------------------------------- interação
@@ -463,36 +558,60 @@ export class TowerScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------- update
+  /** escada cuja zona contém o jogador (as zonas nunca se sobrepõem em x) */
+  private currentLadder(): Ladder | null {
+    for (const lad of this.ladders) {
+      const zb = lad.zone.body as Phaser.Physics.Arcade.StaticBody;
+      if (
+        this.player.x > zb.x && this.player.x < zb.x + zb.width &&
+        this.player.y > zb.y - 10 && this.player.y < zb.y + zb.height + 10
+      ) {
+        return lad;
+      }
+    }
+    return null;
+  }
+
   update() {
     if (!this.player?.body) return;
+    this.pollTouch();
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 
     const left = this.cursors.left.isDown || this.wasd.A.isDown || this.touchState.left;
     const right = this.cursors.right.isDown || this.wasd.D.isDown || this.touchState.right;
     const up = this.cursors.up.isDown || this.wasd.W.isDown || this.touchState.up;
     const down = this.cursors.down.isDown || this.wasd.S.isDown || this.touchState.down;
-    const jump = Phaser.Input.Keyboard.JustDown(this.cursors.space) || (this.touchState.up && body.blocked.down);
+    // saltar é por borda de subida: segurar ⬆ no topo da escada não vira pulinho
+    const jump = Phaser.Input.Keyboard.JustDown(this.cursors.space) || (up && !this.prevUp);
+    this.prevUp = up;
+    this.wantDown = down; // lido pelo collider da tampa do vão no passo seguinte
 
     // escada?
-    let onLadder = false;
-    for (const z of this.ladders) {
-      const zb = z.body as Phaser.Physics.Arcade.StaticBody;
-      if (
-        this.player.x > zb.x && this.player.x < zb.x + zb.width &&
-        this.player.y > zb.y - 10 && this.player.y < zb.y + zb.height + 10
-      ) {
-        onLadder = true;
-        break;
-      }
+    const lad = this.currentLadder();
+    // distância do centro do sprite até os pés, para pousar rente ao piso
+    const feet = body.bottom - this.player.y;
+    const standY = lad ? lad.topY - feet : 0;
+    // pés já acima do piso de destino: a subida terminou
+    const clearedTop = !!lad && this.player.y <= standY;
+
+    // topo alcançado — sai da escada de pé sobre a tampa invisível do vão,
+    // de onde só desce apertando ↓
+    if (this.climbing && clearedTop && !down) {
+      this.climbing = false;
+      // 1px de folga para a gravidade encostá-lo na tampa no passo seguinte
+      // (o corpo se ressincroniza com o sprite no preUpdate da física)
+      this.player.setY(standY - 1);
+      body.setVelocity(0, 0);
+      body.setAllowGravity(true);
     }
 
     const now = this.time.now;
-    if (onLadder && (up || down || this.climbing)) {
+    if (lad && ((up && !clearedTop) || down || this.climbing)) {
       this.climbing = true;
       body.setAllowGravity(false);
       body.setVelocityX(left ? -120 : right ? 120 : 0);
-      body.setVelocityY(up ? -140 : down ? 140 : 0);
-      if (up || down) {
+      body.setVelocityY(up && !clearedTop ? -CLIMB_SPEED : down ? CLIMB_SPEED : 0);
+      if ((up && !clearedTop) || down) {
         this.player.play('knight-climb', true);
         if (now - this.lastStepSound > 220) {
           Audio.climb();
@@ -502,7 +621,8 @@ export class TowerScene extends Phaser.Scene {
     } else {
       this.climbing = false;
       body.setAllowGravity(true);
-      const speed = 210;
+      // no ar o cavaleiro corre mais: o salto cobre um vão bem mais largo
+      const speed = body.blocked.down ? RUN_SPEED : AIR_SPEED;
       if (left) {
         body.setVelocityX(-speed);
         this.player.setFlipX(true);
@@ -512,8 +632,8 @@ export class TowerScene extends Phaser.Scene {
       } else {
         body.setVelocityX(0);
       }
-      if ((jump || (up && body.blocked.down)) && body.blocked.down) {
-        body.setVelocityY(-360);
+      if (jump && body.blocked.down) {
+        body.setVelocityY(JUMP_VELOCITY);
         Audio.jump();
       }
       if (!body.blocked.down) {
