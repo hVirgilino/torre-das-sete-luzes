@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, DESIGN_DX } from '../data/config';
+import { manutencaoLiberada } from './Manutencao';
 
 /** a lua fica ancorada na borda direita, não numa coluna fixa de 960 */
 export const MOON_X = GAME_WIDTH - 180;
@@ -27,7 +28,9 @@ export class BootScene extends Phaser.Scene {
     this.makeVitrola();
     this.makeMisc();
     this.makeAnimations();
-    this.scene.start('Menu');
+    // MANUTENÇÃO: quem já digitou a sequência entra direto no jogo.
+    // Para devolver o jogo ao ar para todos, troque por 'Menu'.
+    this.scene.start(manutencaoLiberada() ? 'Menu' : 'Manutencao');
   }
 
   private ctxOf(key: string, w: number, h: number) {
