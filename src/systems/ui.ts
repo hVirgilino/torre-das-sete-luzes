@@ -40,14 +40,20 @@ export function makeStarRow(
   y: number,
   earned: number,
   scale = 1,
-  estilos: EstiloEstrela[] = []
+  estilos: EstiloEstrela[] = [],
+  orientacao: 'horizontal' | 'vertical' = 'horizontal'
 ): { container: Phaser.GameObjects.Container; stars: Phaser.GameObjects.Sprite[] } {
   const gap = 46 * scale;
   const stars: Phaser.GameObjects.Sprite[] = [];
   for (let i = 0; i < MAX_ESTRELAS; i++) {
     const on = i < earned;
+    const desloc = (i - (MAX_ESTRELAS - 1) / 2) * gap;
     const sp = scene.add
-      .sprite((i - (MAX_ESTRELAS - 1) / 2) * gap, 0, on ? 'star-on' : 'star-off')
+      .sprite(
+        orientacao === 'vertical' ? 0 : desloc,
+        orientacao === 'vertical' ? desloc : 0,
+        on ? 'star-on' : 'star-off'
+      )
       .setScale(scale);
     // o brilho de pódio só vale para estrela já conquistada: o lugar vazio
     // continua apagado, senão a vitrine mentiria sobre o que falta vencer

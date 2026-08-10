@@ -41,8 +41,7 @@ export class MenuScene extends Phaser.Scene {
 
     // velas flutuantes decorativas
     for (let i = 0; i < 3; i++) {
-      // começam em 170: antes a primeira caía sobre a vitrine de estrelas
-      const c = this.add.sprite(170 + i * 60, 480 - i * 12, 'candle-lit-0').setScale(1.4);
+      const c = this.add.sprite(120 + i * 60, 480 - i * 12, 'candle-lit-0').setScale(1.4);
       c.play({ key: 'candle-flame', delay: i * 180 });
     }
 
@@ -123,8 +122,9 @@ export class MenuScene extends Phaser.Scene {
     const forcado = new URLSearchParams(location.search).get('podio') as EstiloEstrela | null;
 
     const { container, stars } = makeStarRow(
-      this, 78, GAME_HEIGHT - 30, forcado ? MAX_ESTRELAS : State.stars, 0.62,
-      forcado ? Array(MAX_ESTRELAS).fill(forcado) : []
+      this, 36, GAME_HEIGHT - 60, forcado ? MAX_ESTRELAS : State.stars, 0.62,
+      forcado ? Array(MAX_ESTRELAS).fill(forcado) : [],
+      'vertical'
     );
     container.setDepth(20);
     this.menuItems.push(container);

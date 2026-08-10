@@ -189,7 +189,7 @@ export class FinalScene extends Phaser.Scene {
       Audio.candleLight();
       this.cameras.main.flash(180, 255, 194, 77);
       const burst = this.add
-        .particles(container.x + star.x, container.y, 'spark', {
+        .particles(container.x + star.x, container.y + star.y, 'spark', {
           speed: { min: 50, max: 150 }, lifespan: 800, quantity: 20,
           scale: { start: 1.4, end: 0 }, tint: 0xffc24d, emitting: false
         })
