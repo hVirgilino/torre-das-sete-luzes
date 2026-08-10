@@ -4,6 +4,7 @@ import { State } from '../systems/state';
 import { Audio } from '../systems/audio';
 import { Dialog, fadeIn, fadeOut, wait } from '../systems/ui';
 import { placeCourt, swordSwings } from './cutscene';
+import { pedirTexto } from '../systems/modal';
 import { initSceneView } from '../systems/display';
 
 export class IntroScene extends Phaser.Scene {
@@ -56,28 +57,12 @@ export class IntroScene extends Phaser.Scene {
     return this.nameAsked;
   }
 
-  private askName(): Promise<string> {
-    return new Promise((resolve) => {
-      const overlay = document.getElementById('name-overlay')!;
-      const input = document.getElementById('name-input') as HTMLInputElement;
-      const btn = document.getElementById('name-confirm')!;
-      overlay.classList.add('visible');
-      input.value = '';
-      setTimeout(() => input.focus(), 50);
-      const done = () => {
-        overlay.classList.remove('visible');
-        btn.removeEventListener('click', done);
-        input.removeEventListener('keydown', onKey);
-        Audio.confirm();
-        resolve(input.value.trim() || 'Galahad');
-      };
-      const onKey = (e: KeyboardEvent) => {
-        if (e.key === 'Enter') done();
-        e.stopPropagation();
-      };
-      btn.addEventListener('click', done);
-      input.addEventListener('keydown', onKey);
+  private async askName(): Promise<string> {
+    const nome = await pedirTexto({
+      titulo: 'Qual é o vosso nome, Sir?',
+      dica: 'Vosso nome'
     });
+    return (nome ?? '').trim() || 'Galahad';
   }
 
   private async runCutscene() {

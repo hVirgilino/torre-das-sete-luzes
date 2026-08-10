@@ -2,15 +2,30 @@ import Phaser from 'phaser';
 import { FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
 import { initSceneView, uiPx } from '../systems/display';
 
+/** marca de que este navegador já atravessou a manutenção */
+export const CHAVE_LIBERADO = 'cerimonia-da-luz:manutencao-liberada:v1';
+
+/** Tamanho da sequência que dispara a conferência automática. */
+const TAMANHO_SEQUENCIA = 12;
+
+/** true se o jogador já digitou a sequência alguma vez neste navegador */
+export function manutencaoLiberada(): boolean {
+  try {
+    return localStorage.getItem(CHAVE_LIBERADO) === '1';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Tela de manutenção — substitui o menu enquanto o jogo está fora do ar.
  *
- * Para voltar ao normal basta reverter o commit que a introduziu: ela não
- * altera regra nenhuma do jogo, só troca a cena que o Boot abre no fim.
+ * Não altera regra nenhuma do jogo: só troca a cena que o Boot abre no fim.
+ * Para devolver o jogo ao ar para todos, o Boot volta a abrir 'Menu'.
  *
- * O cavaleiro anda e salta em laço, sem física: uma travessia por tween e um
- * arco de salto disparado a cada volta. Arcade Physics aqui só traria corpo,
- * colisão e gravidade para nada.
+ * O cavaleiro anda e salta em laço, sem física: uma travessia por tween e dois
+ * arcos de salto por volta. Arcade Physics aqui só traria corpo, colisão e
+ * gravidade para nada.
  */
 export class ManutencaoScene extends Phaser.Scene {
   constructor() {
@@ -92,6 +107,79 @@ export class ManutencaoScene extends Phaser.Scene {
     });
 
     this.animarCavaleiro(chaoY);
+    this.escutarSequencia();
+  }
+
+  /**
+   * Sequência secreta para atravessar a manutenção.
+   *
+   * As teclas vão para um buffer invisível. Quando ele chega ao tamanho
+   * esperado, a sequência é enviada ao servidor — que tem o scrypt e o rate
+   * limit. Enter envia antes da hora, para senha de outro tamanho.
+   *
+   * Isto é uma tranca social, não uma fronteira de segurança: quem abre o
+   * devtools passa de qualquer jeito. O que importa é que a senha nunca está
+   * no bundle para ser lida.
+   */
+  private escutarSequencia() {
+    const TAMANHO = TAMANHO_SEQUENCIA;
+    let buffer = '';
+    let verificando = false;
+
+    const pista = this.add
+      .text(GAME_WIDTH - 16, GAME_HEIGHT - 14, '', {
+        fontFamily: FONTS.body,
+        fontSize: uiPx(13),
+        color: '#3a4472'
+      })
+      .setOrigin(1, 1);
+
+    const enviar = async () => {
+      if (verificando || !buffer) return;
+      verificando = true;
+      const tentativa = buffer;
+      buffer = '';
+      pista.setText('conferindo...');
+      try {
+        const resp = await fetch('/api/manutencao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ senha: tentativa })
+        });
+        if (resp.ok) {
+          try {
+            localStorage.setItem(CHAVE_LIBERADO, '1');
+          } catch {
+            /* sem storage: libera só esta sessão */
+          }
+          pista.setText('');
+          this.cameras.main.fadeOut(500, 4, 6, 18);
+          this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Menu'));
+          return;
+        }
+        pista.setText(resp.status === 429 ? 'aguarde um pouco' : '✕');
+      } catch {
+        pista.setText('sem conexão');
+      } finally {
+        verificando = false;
+        this.time.delayedCall(1600, () => pista.setText(''));
+      }
+    };
+
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+      if (verificando) return;
+      if (e.key === 'Enter') return void enviar();
+      if (e.key === 'Backspace') {
+        buffer = buffer.slice(0, -1);
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      } else {
+        return;
+      }
+      // um ponto por tecla: dá retorno de que está registrando, sem mostrar nada
+      pista.setText('·'.repeat(Math.min(buffer.length, TAMANHO)));
+      if (buffer.length >= TAMANHO) void enviar();
+    });
   }
 
   /** Travessia contínua com um salto no meio do caminho, em laço infinito. */

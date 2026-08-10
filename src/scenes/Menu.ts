@@ -1,10 +1,18 @@
 import Phaser from 'phaser';
-import { DESIGN_DX, DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
+import {
+  DESIGN_DX, DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH, MAX_ESTRELAS, dificuldadePorId
+} from '../data/config';
 import { MOON_X } from './Boot';
 import { nextTrack, trackById, TRACKS } from '../data/tracks';
 import { State, formatClock } from '../systems/state';
 import { Audio } from '../systems/audio';
-import { makeButton, makeSlider, makeStarRow, fadeOut } from '../systems/ui';
+import {
+  makeButton, makeSlider, makeStarRow, aplicarEstiloEstrela, estiloPorPosicao,
+  dificuldadeDaEstrela, fadeOut, type EstiloEstrela
+} from '../systems/ui';
+import { Api, ErroApi, entradasPublicadas, ehRanqueavel } from '../systems/api';
+import { Ranqueado } from '../systems/ranqueado';
+import { pedirTexto } from '../systems/modal';
 import {
   RESOLUTIONS, initSceneView, isAutoResolution, renderScale, resolutionOf, uiScale
 } from '../systems/display';
@@ -71,13 +79,15 @@ export class MenuScene extends Phaser.Scene {
 
     this.buildTrophies();
 
-    const novo = makeButton(this, GAME_WIDTH / 2, 280, 'Novo Jogo', () => this.startNewGame());
-    const cont = makeButton(this, GAME_WIDTH / 2, 335, 'Continuar', () => this.continueGame());
-    const opts = makeButton(this, GAME_WIDTH / 2, 390, 'Opções', () => this.toggleOptions());
+    const novo = makeButton(this, GAME_WIDTH / 2, 276, 'Novo Jogo', () => this.startNewGame(), 24);
+    const cont = makeButton(this, GAME_WIDTH / 2, 320, 'Continuar', () => this.continueGame(), 24);
+    const rank = makeButton(this, GAME_WIDTH / 2, 364, 'Partida Ranqueada', () => this.iniciarRanqueada(), 24);
+    const tab = makeButton(this, GAME_WIDTH / 2, 408, 'Ranking', () => this.abrirRanking(), 24);
+    const opts = makeButton(this, GAME_WIDTH / 2, 452, 'Opções', () => this.toggleOptions(), 24);
     if (!State.hasSave) {
       cont.setAlpha(0.35).disableInteractive();
     }
-    this.menuItems.push(novo, cont, opts);
+    this.menuItems.push(novo, cont, rank, tab, opts);
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 18, 'toque ou clique para liberar o som', {
@@ -107,20 +117,27 @@ export class MenuScene extends Phaser.Scene {
    * dificuldade já vencida — a vitrine de quem faz speedrun.
    */
   private buildTrophies() {
-    const { container, stars } = makeStarRow(this, GAME_WIDTH / 2, 222, State.stars, 0.8);
-    this.menuItems.push(container);
-    // as acesas respiram devagar; os lugares vazios ficam quietos e opacos
-    stars.forEach((s, i) => {
-      if (i < State.stars) {
-        this.tweens.add({
-          targets: s, scale: { from: 0.8, to: 0.88 },
-          duration: 1500, yoyo: true, repeat: -1, ease: 'sine.inout', delay: i * 260
-        });
-      } else {
-        s.setAlpha(0.5);
-      }
-    });
+    // ?podio=lenda|platina|bronze força o brilho sem precisar de ranking — é o
+    // único jeito de conferir a arte antes de existir um top 3 de verdade
+    const forcado = new URLSearchParams(location.search).get('podio') as EstiloEstrela | null;
 
+    const { container, stars } = makeStarRow(
+      this, 36, GAME_HEIGHT - 60, forcado ? MAX_ESTRELAS : State.stars, 0.62,
+      forcado ? Array(MAX_ESTRELAS).fill(forcado) : [],
+      'vertical'
+    );
+    container.setDepth(20);
+    this.menuItems.push(container);
+    stars.forEach((s, i) => {
+      if (i >= State.stars && !forcado) s.setAlpha(0.45);
+    });
+    if (!forcado) this.aplicarBrilhoDePodio(stars);
+
+    this.buildRecordes();
+  }
+
+  /** Melhores tempos locais, no canto oposto às estrelas. */
+  private buildRecordes() {
     const vencidas = DIFFICULTIES.filter((d) => State.trophies.records[d.id] !== undefined);
     if (!vencidas.length) return;
 
@@ -146,6 +163,42 @@ export class MenuScene extends Phaser.Scene {
       );
     });
     this.menuItems.push(this.add.container(24, 26, kids));
+  }
+
+  /**
+   * Pinta cada estrela com a colocação do jogador **na dificuldade dela**.
+   *
+   * A estrela 1 é do Iniciático, a 2 do DeMolay, a 3 do Cavaleiro. Três
+   * lendárias significam três primeiros lugares distintos, não um só repetido.
+   *
+   * Assíncrono e tolerante a falha: sem rede, ou rodando fora da Vercel, as
+   * estrelas ficam douradas e o menu não pisca.
+   */
+  private async aplicarBrilhoDePodio(stars: Phaser.GameObjects.Sprite[]) {
+    const entradas = entradasPublicadas();
+    if (!entradas.length || !State.stars) return;
+    try {
+      const { posicoes } = await Api.minhasColocacoes(entradas);
+      if (!this.scene.isActive()) return;
+
+      // várias publicações na mesma dificuldade: vale a melhor colocação
+      const melhorPorDificuldade = new Map<string, number>();
+      for (const p of posicoes) {
+        const atual = melhorPorDificuldade.get(p.dificuldade);
+        if (atual === undefined || p.posicao < atual) {
+          melhorPorDificuldade.set(p.dificuldade, p.posicao);
+        }
+      }
+
+      stars.forEach((sp, i) => {
+        if (i >= State.stars || !sp.active) return;
+        const dif = dificuldadeDaEstrela(i);
+        const estilo = estiloPorPosicao(dif ? melhorPorDificuldade.get(dif) : undefined);
+        if (estilo !== 'padrao') aplicarEstiloEstrela(sp, estilo, i);
+      });
+    } catch {
+      /* ranking indisponível — o menu não deve nem piscar por causa disso */
+    }
   }
 
   // ---------------------------------------------------------- atmosfera
@@ -252,6 +305,8 @@ export class MenuScene extends Phaser.Scene {
 
   private async startNewGame() {
     if (this.optionsPanel) this.toggleOptions();
+    // partida casual nunca herda uma corrida ranqueada pendente
+    Ranqueado.encerrar();
     this.menuItems.forEach((m) => (m as any).setVisible?.(false));
     // câmera dá zoom no castelo com fade out
     this.cameras.main.zoomTo(3.2 * renderScale(), 1600, 'Sine.easeIn');
@@ -261,7 +316,59 @@ export class MenuScene extends Phaser.Scene {
     this.scene.start('Intro');
   }
 
+  /**
+   * Partida ranqueada: pula intro e tutorial de propósito. O relógio é do
+   * servidor e começa a correr no instante em que a corrida abre, então
+   * qualquer cutscene no meio seria tempo perdido no placar.
+   */
+  private async iniciarRanqueada() {
+    if (this.optionsPanel) this.toggleOptions();
+    const dif = State.settings.difficulty;
+    if (!ehRanqueavel(dif)) {
+      this.mostrarAviso(
+        `O modo ${dificuldadePorId(dif)?.nome} não entra no ranking.\n` +
+          'Escolha Iniciático, DeMolay ou Cavaleiro nas Opções.'
+      );
+      return;
+    }
+    const nome = await pedirTexto({
+      titulo: 'Partida ranqueada',
+      dica: 'Nome do cavaleiro',
+      ajuda: `Modo ${dificuldadePorId(dif)?.nome}. O tempo começa agora e corre até o Rei — ` +
+        'sem pausa, numa sessão só. Trocar a dificuldade fica nas Opções.',
+      confirmar: 'Começar'
+    });
+    if (nome === null) return;
+
+    try {
+      await Ranqueado.iniciar(nome.trim() || 'Galahad', dif);
+      await fadeOut(this, 400);
+      this.scene.start('Tower');
+    } catch (erro) {
+      const msg = erro instanceof ErroApi ? erro.message : 'falha ao abrir a corrida';
+      this.mostrarAviso(`Não foi possível iniciar a partida ranqueada.\n${msg}`);
+    }
+  }
+
+  private mostrarAviso(texto: string) {
+    const aviso = this.add
+      .text(GAME_WIDTH / 2, 500, texto, {
+        fontFamily: FONTS.body, fontSize: '15px', color: '#ff8a8a', align: 'center',
+        backgroundColor: 'rgba(6,10,28,0.9)', padding: { x: 10, y: 6 }
+      })
+      .setOrigin(0.5)
+      .setDepth(1500);
+    this.tweens.add({ targets: aviso, alpha: 0, delay: 3200, duration: 800, onComplete: () => aviso.destroy() });
+  }
+
+  private async abrirRanking() {
+    if (this.optionsPanel) this.toggleOptions();
+    await fadeOut(this, 350);
+    this.scene.start('Ranking');
+  }
+
   private continueGame() {
+    Ranqueado.encerrar();
     State.loadSave();
     if (!State.hasSave) return;
     fadeOut(this, 500).then(() => this.scene.start('Tower'));

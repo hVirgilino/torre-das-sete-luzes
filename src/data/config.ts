@@ -12,16 +12,6 @@ export const isTouchDevice = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true;
 
 /**
- * Largura lógica do mundo, deduzida da proporção real da tela.
- *
- * Um celular alto como o S24 é 19,5:9 — com a largura fixa em 960 (16:9) o
- * jogo aparecia encaixado no meio com tarjas pretas grossas dos dois lados.
- * Esticando a largura lógica até a proporção do aparelho, o cenário ocupa a
- * tela inteira sem deformar nada: o mundo é mais largo, não esticado.
- *
- * Telas mais "quadradas" que 16:9 continuam em 960 com letterbox, como antes.
- */
-/**
  * Medidas da tela em CSS px. No celular vale `screen`, não `innerWidth`: a
  * barra de endereço do Android come dezenas de pixels da altura e voltaria
  * uma proporção diferente a cada carregamento da página.
@@ -33,6 +23,16 @@ export function screenSize(): { w: number; h: number } {
   return { w: window.screen.width, h: window.screen.height };
 }
 
+/**
+ * Largura lógica do mundo, deduzida da proporção real da tela.
+ *
+ * Um celular alto como o S24 é 19,5:9 — com a largura fixa em 960 (16:9) o
+ * jogo aparecia encaixado no meio com tarjas pretas grossas dos dois lados.
+ * Esticando a largura lógica até a proporção do aparelho, o cenário ocupa a
+ * tela inteira sem deformar nada: o mundo é mais largo, não esticado.
+ *
+ * Telas mais "quadradas" que 16:9 continuam em 960 com letterbox, como antes.
+ */
 function logicalWidth(): number {
   if (typeof window === 'undefined') return DESIGN_WIDTH;
   const { w, h } = screenSize();
@@ -64,93 +64,9 @@ export type ResolutionId = '540' | '720' | '1080' | '1440';
 /** Degraus de escala da interface */
 export const UI_SCALES = [0.8, 1, 1.15, 1.3] as const;
 
-export type DifficultyId = 'escudeiro' | 'iniciatico' | 'demolay' | 'cavaleiro';
-
-export interface Difficulty {
-  id: DifficultyId;
-  nome: string;
-  descricao: string;
-  /** segundos por questão */
-  tempo: number;
-  /** número de alternativas exibidas */
-  opcoes: number;
-  /** quantas palavras somem por lacuna: 'palavra' | 'palavras' | 'frase' */
-  lacuna: 'palavra' | 'palavras' | 'frase';
-  /** quais partes do texto entram no banco de questões */
-  banco: Array<'vela' | 'abertura' | 'encerramento'>;
-  /** estrelas que concluir esta dificuldade garante (Escudeiro não dá nenhuma) */
-  estrelas: number;
-  /** o que o Rei diz na tela de fim de jogo neste modo */
-  mensagemFinal: string;
-}
-
-/** Total de estrelas possíveis — a vitrine do menu tem sempre este tamanho. */
-export const MAX_ESTRELAS = 3;
-
-export const DIFFICULTIES: Difficulty[] = [
-  {
-    id: 'escudeiro',
-    nome: 'Escudeiro',
-    descricao: '20s · 2 opções · poucas palavras',
-    tempo: 20,
-    opcoes: 2,
-    lacuna: 'palavra',
-    banco: ['vela'],
-    estrelas: 0,
-    mensagemFinal:
-      'Parabéns, Sir! As sete luzes arderam sob vossa guarda. Mas o Escudeiro ainda ' +
-      'não conhece o peso da armadura — que tal enfrentar a Torre no modo Iniciático?'
-  },
-  {
-    id: 'iniciatico',
-    nome: 'Iniciático',
-    descricao: '15s · 3 opções · mais palavras',
-    tempo: 15,
-    opcoes: 3,
-    lacuna: 'palavras',
-    banco: ['vela', 'abertura'],
-    estrelas: 1,
-    mensagemFinal:
-      'Vossa primeira estrela, Sir. O Iniciático já não tropeça nas palavras da ' +
-      'Cerimônia — mas o grau de DeMolay exige recitá-la de cor. Ousais?'
-  },
-  {
-    id: 'demolay',
-    nome: 'DeMolay',
-    descricao: '10s · 4 opções · frases inteiras',
-    tempo: 10,
-    opcoes: 4,
-    lacuna: 'frase',
-    banco: ['vela', 'abertura', 'encerramento'],
-    estrelas: 2,
-    mensagemFinal:
-      'Duas estrelas, Sir. Recitastes a Cerimônia inteira sem hesitar — poucos ' +
-      'chegam aqui. Resta a prova do Cavaleiro: as mesmas palavras, metade do tempo.'
-  },
-  {
-    id: 'cavaleiro',
-    nome: 'Cavaleiro',
-    descricao: '5s · 4 opções · frases inteiras',
-    tempo: 5,
-    opcoes: 4,
-    lacuna: 'frase',
-    banco: ['vela', 'abertura', 'encerramento'],
-    estrelas: 3,
-    mensagemFinal:
-      'Sois digno deste grau, Sir. Vencestes a Torre na maior dificuldade, com o ' +
-      'tempo correndo contra vós a cada palavra. As três estrelas são vossas — ' +
-      'nada mais há nesta Torre que possa vos ensinar.'
-  }
-];
-
-/**
- * Trancas por andar (índice 0 = andar 1) — progressão crescente: o andar N tem N+1 trancas.
- * Para outra curva, basta trocar o array, ex.: [2, 4, 6, 8, 10, 12, 14].
- */
-export const LOCKS_PER_FLOOR = [2, 3, 4, 5, 6, 7, 8];
-
-/** Trancas que retornam ao usar a habilidade daquela vela */
-export const LOCKS_RETURNED_ON_ABILITY = 1;
+// dificuldades, trancas e estrelas vivem em ./difficulty (módulo puro, usado
+// também pelas functions da API); reexportados aqui para não quebrar imports
+export * from './difficulty';
 
 export type AbilityId =
   | 'eliminarFalsa'

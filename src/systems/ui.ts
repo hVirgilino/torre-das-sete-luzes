@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
-import { FONTS, GAME_HEIGHT, GAME_WIDTH, MAX_ESTRELAS } from '../data/config';
+import {
+  DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH, MAX_ESTRELAS, type DifficultyId
+} from '../data/config';
 import { Audio } from './audio';
 import { uiPx } from './display';
 
@@ -11,23 +13,80 @@ import { uiPx } from './display';
  * O container guarda as imagens na ordem, para quem chamou poder animar
  * individualmente as estrelas recém-conquistadas.
  */
+export type EstiloEstrela = 'padrao' | 'lenda' | 'platina' | 'bronze';
+
+/** posição no ranking global → estilo da estrela; fora do pódio é o dourado normal */
+export function estiloPorPosicao(posicao: number | null | undefined): EstiloEstrela {
+  if (posicao === 1) return 'lenda';
+  if (posicao === 2) return 'platina';
+  if (posicao === 3) return 'bronze';
+  return 'padrao';
+}
+
+const TEXTURA_PODIO: Record<Exclude<EstiloEstrela, 'padrao'>, string> = {
+  lenda: 'star-lenda',
+  platina: 'star-platina',
+  bronze: 'star-bronze'
+};
+
+/**
+ * @param estilos brilho de cada posição da vitrine. Cada estrela representa uma
+ *   dificuldade, e o estilo dela vem da colocação do jogador **naquela**
+ *   dificuldade — três lendárias significam três primeiros lugares distintos.
+ */
 export function makeStarRow(
   scene: Phaser.Scene,
   x: number,
   y: number,
   earned: number,
-  scale = 1
-): { container: Phaser.GameObjects.Container; stars: Phaser.GameObjects.Image[] } {
+  scale = 1,
+  estilos: EstiloEstrela[] = [],
+  orientacao: 'horizontal' | 'vertical' = 'horizontal'
+): { container: Phaser.GameObjects.Container; stars: Phaser.GameObjects.Sprite[] } {
   const gap = 46 * scale;
-  const stars: Phaser.GameObjects.Image[] = [];
+  const stars: Phaser.GameObjects.Sprite[] = [];
   for (let i = 0; i < MAX_ESTRELAS; i++) {
     const on = i < earned;
-    const img = scene.add
-      .image((i - (MAX_ESTRELAS - 1) / 2) * gap, 0, on ? 'star-on' : 'star-off')
+    const desloc = (i - (MAX_ESTRELAS - 1) / 2) * gap;
+    const sp = scene.add
+      .sprite(
+        orientacao === 'vertical' ? 0 : desloc,
+        orientacao === 'vertical' ? desloc : 0,
+        on ? 'star-on' : 'star-off'
+      )
       .setScale(scale);
-    stars.push(img);
+    // o brilho de pódio só vale para estrela já conquistada: o lugar vazio
+    // continua apagado, senão a vitrine mentiria sobre o que falta vencer
+    const estilo = estilos[i] ?? 'padrao';
+    if (on && estilo !== 'padrao') aplicarEstiloEstrela(sp, estilo, i);
+    stars.push(sp);
   }
   return { container: scene.add.container(x, y, stars), stars };
+}
+
+/**
+ * Dificuldade de cada posição da vitrine, deduzida do próprio catálogo: a
+ * estrela `i` pertence à dificuldade que concede `i + 1` estrelas. Assim a
+ * ordem nunca sai de sincronia com DIFFICULTIES.
+ */
+export function dificuldadeDaEstrela(indice: number): DifficultyId | undefined {
+  return DIFFICULTIES.find((d) => d.estrelas === indice + 1)?.id;
+}
+
+/** Troca uma estrela já acesa pelo brilho de pódio, com defasagem entre elas. */
+export function aplicarEstiloEstrela(
+  sp: Phaser.GameObjects.Sprite,
+  estilo: EstiloEstrela,
+  indice = 0
+) {
+  if (estilo === 'padrao') {
+    sp.stop();
+    sp.setTexture('star-on');
+    return;
+  }
+  const chave = TEXTURA_PODIO[estilo];
+  sp.setTexture(chave, '0');
+  sp.play({ key: `${chave}-brilho`, delay: indice * 140 }, true);
 }
 
 /** Botão de texto medieval com hover/tap */

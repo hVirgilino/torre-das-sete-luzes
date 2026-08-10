@@ -71,6 +71,16 @@
       border: 2px solid #4a1010; border-radius: 4px;
     }
     .name-panel button:hover { background: #963030; }
+    .name-panel p {
+      font-family: 'IM Fell English', serif; font-size: 14px;
+      color: #6b4a20; margin-top: 10px; max-width: 300px;
+    }
+    .name-panel p:empty { display: none; }
+    #name-skip {
+      background: transparent; color: #6b4a20; border-color: #a8895c;
+      font-size: 13px; padding: 6px 18px; margin-top: 8px;
+    }
+    #name-skip:hover { background: rgba(122, 91, 35, 0.12); }
   </style>
 </head>
 <body>
@@ -82,9 +92,11 @@
   </div>
   <div id="name-overlay">
     <div class="name-panel">
-      <h2>Qual é o vosso nome, Sir?</h2>
+      <h2 id="name-title">Qual é o vosso nome, Sir?</h2>
       <input id="name-input" maxlength="16" placeholder="Vosso nome" autocomplete="off" />
+      <p id="name-hint"></p>
       <button id="name-confirm">Assim seja</button>
+      <button id="name-skip" hidden>Deixar em branco</button>
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>

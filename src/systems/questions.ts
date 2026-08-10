@@ -1,5 +1,7 @@
 import { CEREMONY, CeremonySection } from '../data/ceremony';
-import { Difficulty } from '../data/config';
+// de ./difficulty, não de ./config: este módulo roda também nas functions,
+// onde importar config (que lê `window`) seria pedir para quebrar
+import { Difficulty } from '../data/difficulty';
 
 export interface Question {
   /** título da seção de origem (ex.: "Fidelidade") */
@@ -84,13 +86,26 @@ const norm = (s: string) => clean(s).replace(/\s+/g, ' ');
 // nunca bloqueia a geração de uma questão.
 const RECENT_SENTENCES_CAP = 8;
 const RECENT_SPANS_CAP = 12;
-let recentSentences: string[] = [];
-let recentSpans: string[] = [];
+
+/**
+ * Memória de repetição. Deixou de ser estado de módulo porque as functions da
+ * API geram perguntas para várias corridas na mesma instância — com uma lista
+ * global, o histórico de um jogador afetaria o sorteio do outro. No cliente
+ * continua havendo uma instância única (`historicoLocal`), como antes.
+ */
+export interface QuestionHistory {
+  sentencas: string[];
+  spans: string[];
+}
+
+export const novoHistorico = (): QuestionHistory => ({ sentencas: [], spans: [] });
+
+const historicoLocal = novoHistorico();
 
 /** Reinicia a memória de repetição — chamar ao começar um novo jogo. */
 export function resetQuestionHistory(): void {
-  recentSentences = [];
-  recentSpans = [];
+  historicoLocal.sentencas = [];
+  historicoLocal.spans = [];
 }
 
 function remember(list: string[], cap: number, entry: string) {
@@ -99,16 +114,16 @@ function remember(list: string[], cap: number, entry: string) {
 }
 
 /** escolhe uma sentença evitando as usadas recentemente; libera memória se preciso */
-function pickSentence(sents: string[], sectionId: string): string {
-  const fresh = sents.filter((s) => !recentSentences.includes(`${sectionId}::${norm(s)}`));
+function pickSentence(sents: string[], sectionId: string, hist: QuestionHistory): string {
+  const fresh = sents.filter((s) => !hist.sentencas.includes(`${sectionId}::${norm(s)}`));
   const pool = fresh.length ? fresh : sents;
   const chosen = pick(pool);
-  remember(recentSentences, RECENT_SENTENCES_CAP, `${sectionId}::${norm(chosen)}`);
+  remember(hist.sentencas, RECENT_SENTENCES_CAP, `${sectionId}::${norm(chosen)}`);
   return chosen;
 }
 
 /** amostra alguns recortes candidatos e prefere palavras significativas + spans não repetidos */
-function pickSpan(ws: string[], n: number): { start: number; span: string } {
+function pickSpan(ws: string[], n: number, hist: QuestionHistory): { start: number; span: string } {
   const sig = significantIndices(ws);
   const candidates = sig.filter((i) => i + n <= ws.length);
   const starts = candidates.length ? candidates : [0];
@@ -119,16 +134,24 @@ function pickSpan(ws: string[], n: number): { start: number; span: string } {
   for (const start of tried) {
     const span = ws.slice(start, start + n).join(' ');
     const sigCount = ws.slice(start, start + n).filter((w) => significantIndices([w]).length > 0).length;
-    const repeatPenalty = recentSpans.includes(norm(span)) ? -3 : 0;
+    const repeatPenalty = hist.spans.includes(norm(span)) ? -3 : 0;
     const score = sigCount + repeatPenalty + Math.random() * 0.5;
     if (!best || score > best.score) best = { start, span, score };
   }
   const chosen = best ?? { start: 0, span: ws.slice(0, n).join(' '), score: 0 };
-  remember(recentSpans, RECENT_SPANS_CAP, norm(chosen.span));
+  remember(hist.spans, RECENT_SPANS_CAP, norm(chosen.span));
   return chosen;
 }
 
-export function generateQuestion(vela: number, difficulty: Difficulty): Question {
+/**
+ * @param hist memória anti-repetição. O cliente omite e usa a instância local;
+ *             o servidor passa a da corrida, carregada do banco.
+ */
+export function generateQuestion(
+  vela: number,
+  difficulty: Difficulty,
+  hist: QuestionHistory = historicoLocal
+): Question {
   // banco de seções: vela do andar tem prioridade; extras conforme dificuldade
   const velaSection = CEREMONY.find((s) => s.vela === vela)!;
   const extras = CEREMONY.filter(
@@ -141,11 +164,11 @@ export function generateQuestion(vela: number, difficulty: Difficulty): Question
   const source = useOwn ? velaSection : pick(extras);
 
   const sents = sentences(source);
-  const sentence = pickSentence(sents, source.id);
+  const sentence = pickSentence(sents, source.id, hist);
   const ws = words(sentence);
 
   const n = Math.min(spanLength(difficulty), Math.max(1, ws.length - 3));
-  const { start, span } = pickSpan(ws, n);
+  const { start, span } = pickSpan(ws, n, hist);
 
   const antes = ws.slice(0, start).join(' ');
   const depois = ws.slice(start + n).join(' ');
