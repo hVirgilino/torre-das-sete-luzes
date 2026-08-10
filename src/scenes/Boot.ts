@@ -27,7 +27,8 @@ export class BootScene extends Phaser.Scene {
     this.makeVitrola();
     this.makeMisc();
     this.makeAnimations();
-    this.scene.start('Menu');
+    // MANUTENÇÃO: reverter o commit desta linha devolve o jogo ao ar
+    this.scene.start('Manutencao');
   }
 
   private ctxOf(key: string, w: number, h: number) {

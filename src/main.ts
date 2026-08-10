@@ -15,6 +15,7 @@ import { TutorialScene } from './scenes/Tutorial';
 import { TowerScene } from './scenes/Tower';
 import { QuizScene } from './scenes/Quiz';
 import { FinalScene } from './scenes/Final';
+import { ManutencaoScene } from './scenes/Manutencao';
 
 /**
  * Mantém o canvas colado no tamanho visível do navegador.
@@ -71,7 +72,7 @@ function startGame() {
         debug: false
       }
     },
-    scene: [BootScene, MenuScene, IntroScene, TutorialScene, TowerScene, QuizScene, FinalScene]
+    scene: [BootScene, MenuScene, IntroScene, TutorialScene, TowerScene, QuizScene, FinalScene, ManutencaoScene]
   });
 
   // a varredura própria do Phaser é de 500ms — lenta demais para acompanhar a
