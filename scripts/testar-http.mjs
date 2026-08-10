@@ -95,8 +95,21 @@ const servidor = createServer(async (req, res) => {
   res.end(saida.corpo);
 });
 
-await new Promise((r) => servidor.listen(0, '127.0.0.1', r));
-const BASE = `http://127.0.0.1:${servidor.address().port}/api`;
+/**
+ * Com TORRE_API apontando para um `vercel dev` (ou para a implantação), os
+ * mesmos ataques rodam contra o roteamento real da Vercel em vez do imitado.
+ *   TORRE_API=http://127.0.0.1:3000 npm run test:http
+ */
+const ALVO = process.env.TORRE_API;
+let BASE;
+if (ALVO) {
+  BASE = ALVO.replace(/\/$/, '') + '/api';
+  console.log(`alvo externo: ${BASE}\n`);
+} else {
+  await new Promise((r) => servidor.listen(0, '127.0.0.1', r));
+  BASE = `http://127.0.0.1:${servidor.address().port}/api`;
+  console.log(`alvo: servidor local imitando a borda da Vercel\n`);
+}
 
 // ------------------------------------------------------------------ placar
 let passou = 0;
@@ -133,9 +146,14 @@ checar(
   'X-HTTP-Method-Override não contorna a checagem de método'
 );
 
+const travessia = await fetch(BASE.replace(/\/api$/, '') + '/etc/passwd').then(async (r) => ({
+  status: r.status,
+  texto: await r.text()
+}));
 checar(
-  (await bater('/../../etc/passwd', { method: 'GET' })).status === 404,
-  'travessia de caminho não alcança rota nenhuma'
+  !/root:x:|\/bin\/(ba)?sh|daemon:/.test(travessia.texto) && travessia.status < 500,
+  'travessia de caminho não devolve arquivo do sistema',
+  `(${travessia.status})`
 );
 checar((await bater('/run/start/', { method: 'POST', body: '{}' })).status !== 404,
   'barra final continua resolvendo a mesma rota');
@@ -162,7 +180,7 @@ const gigante = await bater('/run/start', {
   method: 'POST',
   body: JSON.stringify({ nome: 'x'.repeat(5 * 1024 * 1024), dificuldade: 'escudeiro' })
 });
-checar(gigante.status === 413, 'corpo acima do limite é cortado com 413', `(${gigante.status})`);
+checar(gigante.status === 413, 'corpo acima do limite é recusado com 413', `(${gigante.status})`);
 
 // nome enorme mas dentro do limite: precisa ser truncado, não recusado com 500
 const longo = await bater('/run/start', {
@@ -189,11 +207,23 @@ checar(
   'servidor continua de pé depois do JSON profundo'
 );
 
+// duas defesas em camadas: a lista absurda nem passa do teto de corpo...
 const arrayao = await bater('/ranking/me', {
   method: 'POST',
   body: JSON.stringify({ entradas: Array.from({ length: 5000 }, () => ({ id: 'x', token: 'y' })) })
 });
-checar(arrayao.status === 200 && arrayao.json.melhor === null, 'lista gigante em /ranking/me é limitada e ignorada');
+checar(arrayao.status === 413, 'lista absurda em /ranking/me barra no teto de corpo', `(${arrayao.status})`);
+
+// ...e a que cabe no corpo ainda é cortada em 12 pelo handler
+const listaMedia = await bater('/ranking/me', {
+  method: 'POST',
+  body: JSON.stringify({ entradas: Array.from({ length: 200 }, () => ({ id: 'x', token: 'y' })) })
+});
+checar(
+  listaMedia.status === 200 && listaMedia.json.melhor === null,
+  'lista média é aceita, cortada em 12 e ignorada por token inválido',
+  `(${listaMedia.status})`
+);
 
 checar(
   (await bater('/ranking/me', { method: 'POST', body: JSON.stringify({ entradas: 'nao-e-array' }) })).status === 200,
@@ -288,6 +318,6 @@ await sql`delete from run where nome in ('PlainText','IpTeste')`;
 await sql`delete from rate_limit where chave like '%run:start%' or chave like '%admin:login%'`;
 console.log('  base limpa');
 
-servidor.close();
+if (!ALVO) servidor.close();
 console.log(`\n\x1b[1m${passou} passaram, ${falhou} falharam\x1b[0m\n`);
 process.exit(falhou ? 1 : 0);

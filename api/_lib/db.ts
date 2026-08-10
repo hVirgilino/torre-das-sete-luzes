@@ -1,4 +1,5 @@
-import { neon } from '@neondatabase/serverless';
+import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
+import { ErroHttp } from './http';
 
 /**
  * Cliente Neon sobre HTTP. Cada consulta é um fetch, então não existe pool de
@@ -8,8 +9,31 @@ import { neon } from '@neondatabase/serverless';
  * Use SEMPRE como template tag: sql`select ... where id = ${id}`. O driver
  * transforma cada `${}` em parâmetro do protocolo, nunca em concatenação de
  * texto. Montar SQL com `+` ou template literal comum reabre injection.
+ *
+ * A criação é preguiçosa de propósito: lançar no topo do módulo faz a function
+ * inteira morrer com FUNCTION_INVOCATION_FAILED e um 500 sem explicação —
+ * quem estiver configurando o ambiente não descobre o que faltou.
  */
-const url = process.env.DATABASE_URL;
-if (!url) throw new Error('DATABASE_URL ausente no ambiente');
+let cliente: NeonQueryFunction<false, false> | null = null;
 
-export const sql = neon(url);
+function conectar(): NeonQueryFunction<false, false> {
+  if (cliente) return cliente;
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new ErroHttp(
+      503,
+      'banco não configurado: falta DATABASE_URL no ambiente desta implantação'
+    );
+  }
+  cliente = neon(url);
+  return cliente;
+}
+
+/** Proxy sobre a template tag, para o cliente só nascer na primeira consulta. */
+export const sql = ((...args: unknown[]) =>
+  (conectar() as unknown as (...a: unknown[]) => unknown)(...args)) as unknown as
+  NeonQueryFunction<false, false>;
+
+// `sql.query(...)` é usado pelos scripts de migração
+(sql as unknown as Record<string, unknown>).query = (...args: unknown[]) =>
+  (conectar() as unknown as { query: (...a: unknown[]) => unknown }).query(...args);
