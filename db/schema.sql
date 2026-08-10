@@ -75,7 +75,7 @@ create table if not exists ranking (
   motivo        text,
   moderado_em   timestamptz,
   constraint ranking_dificuldade_valida
-    check (dificuldade in ('escudeiro', 'iniciatico', 'demolay', 'cavaleiro')),
+    check (dificuldade in ('iniciatico', 'demolay', 'cavaleiro')),
   constraint ranking_duracao_positiva check (duracao_ms > 0)
 );
 
@@ -101,3 +101,20 @@ create table if not exists rate_limit (
   contador   integer     not null default 0,
   janela_em  timestamptz not null default now()
 );
+
+-- Escudeiro saiu do ranking depois da criação da tabela; este bloco aperta o
+-- CHECK em bases que já existiam. Idempotente: se já estiver apertado, não faz
+-- nada. Falha de propósito se houver linha de Escudeiro publicada, para a
+-- decisão de o que fazer com ela ser humana e não silenciosa.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'ranking_dificuldade_valida'
+       and pg_get_constraintdef(oid) like '%escudeiro%'
+  ) then
+    alter table ranking drop constraint ranking_dificuldade_valida;
+    alter table ranking add constraint ranking_dificuldade_valida
+      check (dificuldade in ('iniciatico', 'demolay', 'cavaleiro'));
+  end if;
+end $$;

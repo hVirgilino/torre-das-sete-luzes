@@ -63,9 +63,9 @@ function checar(ok, descricao, extra = '') {
 }
 
 // ============================================================ partida feliz
-secao('Partida ranqueada completa (modo escudeiro)');
+secao('Partida ranqueada completa (modo iniciatico)');
 
-const r0 = await chamar(rotas.start, { corpo: { nome: 'TesteBot', dificuldade: 'escudeiro' } });
+const r0 = await chamar(rotas.start, { corpo: { nome: 'TesteBot', dificuldade: 'iniciatico' } });
 checar(r0.status === 201 && r0.corpo.runId && r0.corpo.token, 'start abre corrida e devolve token');
 const runId = r0.corpo.runId;
 const token = r0.corpo.token;
@@ -106,9 +106,9 @@ checar(sub.status === 201 && sub.corpo.entradaId, 'submit publica no ranking');
 const entradaId = sub.corpo.entradaId;
 const entradaToken = sub.corpo.entradaToken;
 
-const lista = await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'escudeiro' } });
+const lista = await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'iniciatico' } });
 checar(
-  lista.corpo.ranking.escudeiro.some((e) => e.id === entradaId),
+  lista.corpo.ranking.iniciatico.some((e) => e.id === entradaId),
   'a entrada aparece no ranking publico'
 );
 
@@ -126,7 +126,7 @@ const payloads = [
   '${process.env.DATABASE_URL}'
 ];
 for (const p of payloads) {
-  const r = await chamar(rotas.start, { corpo: { nome: p, dificuldade: 'escudeiro' } });
+  const r = await chamar(rotas.start, { corpo: { nome: p, dificuldade: 'iniciatico' } });
   const criou = r.status === 201;
   checar(criou, `payload tratado como texto: ${JSON.stringify(p.slice(0, 28))}`);
   if (criou) await sql`delete from run where id = ${r.corpo.runId}`;
@@ -135,10 +135,26 @@ const tabelas = await sql`select count(*)::int n from information_schema.tables 
 checar(tabelas[0].n === 5, `as 5 tabelas continuam de pe apos os payloads (${tabelas[0].n})`);
 
 const proto = await chamar(rotas.start, {
-  corpo: { nome: 'Proto', dificuldade: 'escudeiro', __proto__: { admin: true }, constructor: 'x' }
+  corpo: { nome: 'Proto', dificuldade: 'iniciatico', __proto__: { admin: true }, constructor: 'x' }
 });
 checar(proto.status === 201 && {}.admin === undefined, 'prototype pollution no JSON nao contamina');
 if (proto.status === 201) await sql`delete from run where id = ${proto.corpo.runId}`;
+
+secao('Escudeiro fora do ranking');
+
+checar(
+  (await chamar(rotas.start, { corpo: { nome: 'Escu', dificuldade: 'escudeiro' } })).status === 400,
+  'run/start recusa abrir corrida no Escudeiro'
+);
+checar(
+  (await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'escudeiro' } })).status === 400,
+  'ranking publico recusa consultar Escudeiro'
+);
+const todas = await chamar(rotas.ranking, { metodo: 'GET' });
+checar(
+  Object.keys(todas.corpo.ranking).join(',') === 'iniciatico,demolay,cavaleiro',
+  `ranking sem argumento traz só as tres dificuldades (${Object.keys(todas.corpo.ranking).join(',')})`
+);
 
 secao('Forja e adulteração');
 
@@ -155,7 +171,7 @@ checar(
   'runId malformado e recusado antes de tocar o banco'
 );
 
-const outra = await chamar(rotas.start, { corpo: { nome: 'Intruso', dificuldade: 'escudeiro' } });
+const outra = await chamar(rotas.start, { corpo: { nome: 'Intruso', dificuldade: 'iniciatico' } });
 checar(
   (await chamar(rotas.question, {
     corpo: { runId: outra.corpo.runId, token, vela: 1 }
@@ -165,7 +181,7 @@ checar(
 
 // a corrida usada aqui precisa estar ATIVA, senão o teste pararia no guarda de
 // status e nunca exercitaria o vínculo pergunta↔corrida, que é o que importa
-const terceira = await chamar(rotas.start, { corpo: { nome: 'Intruso', dificuldade: 'escudeiro' } });
+const terceira = await chamar(rotas.start, { corpo: { nome: 'Intruso', dificuldade: 'iniciatico' } });
 const qIntruso = await chamar(rotas.question, {
   corpo: { runId: outra.corpo.runId, token: outra.corpo.token, vela: 1 }
 });
@@ -190,7 +206,7 @@ checar(
 // tempo e dificuldade informados pelo cliente devem ser ignorados
 const entradaBanco = await sql`select duracao_ms, dificuldade from ranking where id = ${entradaId}`;
 checar(
-  entradaBanco[0].duracao_ms === duracaoReal && entradaBanco[0].dificuldade === 'escudeiro',
+  entradaBanco[0].duracao_ms === duracaoReal && entradaBanco[0].dificuldade === 'iniciatico',
   'tempo e dificuldade gravados sao os do servidor'
 );
 const reenvio = await chamar(rotas.submit, {
@@ -268,14 +284,14 @@ const mod = await chamar(rotas.moderate, {
   cookie: cookieAdmin
 });
 checar(mod.status === 200, 'censurar com sessao valida funciona');
-const publico = await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'escudeiro' } });
-const linha = publico.corpo.ranking.escudeiro.find((e) => e.id === entradaId);
+const publico = await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'iniciatico' } });
+const linha = publico.corpo.ranking.iniciatico.find((e) => e.id === entradaId);
 checar(linha?.nome === 'Anônimo', 'ranking publico mostra o nome censurado, nao o original');
 
 await chamar(rotas.moderate, { corpo: { id: entradaId, acao: 'ocultar' }, cookie: cookieAdmin });
-const pos = await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'escudeiro' } });
+const pos = await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'iniciatico' } });
 checar(
-  !pos.corpo.ranking.escudeiro.some((e) => e.id === entradaId),
+  !pos.corpo.ranking.iniciatico.some((e) => e.id === entradaId),
   'entrada oculta some do ranking publico'
 );
 const log = await sql`select count(*)::int n from admin_log where ranking_id = ${entradaId}`;

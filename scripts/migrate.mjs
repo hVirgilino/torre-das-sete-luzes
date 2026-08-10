@@ -15,12 +15,31 @@ if (!url) {
 const sql = neon(url);
 const texto = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
 
-// separa por ";" no fim de linha — o schema não usa funções com corpo composto,
-// então não há ponto e vírgula interno para atrapalhar
-const comandos = texto
-  .split(/;\s*$/m)
-  .map((c) => c.trim())
-  .filter((c) => c && !c.split('\n').every((l) => l.trim().startsWith('--')));
+/**
+ * Separa por ";" ignorando os que estão dentro de bloco `$$ ... $$` — um
+ * `do $$ ... $$;` tem ponto e vírgula interno e seria cortado no meio.
+ */
+function separarComandos(sql) {
+  const comandos = [];
+  let atual = '';
+  let dentroDeBloco = false;
+  for (const linha of sql.split('\n')) {
+    // cada $$ alterna entrar/sair do bloco; par na mesma linha se anula
+    const marcas = (linha.match(/\$\$/g) ?? []).length;
+    atual += linha + '\n';
+    if (marcas % 2 === 1) dentroDeBloco = !dentroDeBloco;
+    if (!dentroDeBloco && /;\s*$/.test(linha)) {
+      comandos.push(atual.replace(/;\s*$/, '').trim());
+      atual = '';
+    }
+  }
+  if (atual.trim()) comandos.push(atual.trim());
+  return comandos.filter(
+    (c) => c && !c.split('\n').every((l) => !l.trim() || l.trim().startsWith('--'))
+  );
+}
+
+const comandos = separarComandos(texto);
 
 for (const comando of comandos) {
   const rotulo = comando.split('\n').find((l) => !l.trim().startsWith('--'))?.slice(0, 68) ?? '';

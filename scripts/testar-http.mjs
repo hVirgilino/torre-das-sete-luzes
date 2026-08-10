@@ -168,7 +168,7 @@ checar(
 const semTipo = await bater('/run/start', {
   method: 'POST',
   headers: { 'Content-Type': 'text/plain' },
-  body: JSON.stringify({ nome: 'PlainText', dificuldade: 'escudeiro' })
+  body: JSON.stringify({ nome: 'PlainText', dificuldade: 'iniciatico' })
 });
 checar([201, 400].includes(semTipo.status), 'content-type trocado não gera 500', `(${semTipo.status})`);
 if (semTipo.status === 201) await sql`delete from run where id = ${semTipo.json.runId}`;
@@ -178,14 +178,14 @@ secao('Corpo hostil');
 
 const gigante = await bater('/run/start', {
   method: 'POST',
-  body: JSON.stringify({ nome: 'x'.repeat(5 * 1024 * 1024), dificuldade: 'escudeiro' })
+  body: JSON.stringify({ nome: 'x'.repeat(5 * 1024 * 1024), dificuldade: 'iniciatico' })
 });
 checar(gigante.status === 413, 'corpo acima do limite é recusado com 413', `(${gigante.status})`);
 
 // nome enorme mas dentro do limite: precisa ser truncado, não recusado com 500
 const longo = await bater('/run/start', {
   method: 'POST',
-  body: JSON.stringify({ nome: 'A'.repeat(5000), dificuldade: 'escudeiro' })
+  body: JSON.stringify({ nome: 'A'.repeat(5000), dificuldade: 'iniciatico' })
 });
 checar(longo.status === 201, 'nome absurdamente longo é aceito e truncado', `(${longo.status})`);
 if (longo.status === 201) {
@@ -236,7 +236,7 @@ secao('Cabeçalhos');
 const comInjecao = await bater('/run/start', {
   method: 'POST',
   headers: { 'X-Forwarded-For': '1.2.3.4, 5.6.7.8' },
-  body: JSON.stringify({ nome: 'IpTeste', dificuldade: 'escudeiro' })
+  body: JSON.stringify({ nome: 'IpTeste', dificuldade: 'iniciatico' })
 });
 checar(comInjecao.status === 201, 'x-forwarded-for com vários saltos é aceito');
 if (comInjecao.status === 201) {
@@ -257,7 +257,7 @@ secao('Texto adulterado através da rede');
 
 const rtl = await bater('/run/start', {
   method: 'POST',
-  body: JSON.stringify({ nome: '‮oãtnaf​', dificuldade: 'escudeiro' })
+  body: JSON.stringify({ nome: '‮oãtnaf​', dificuldade: 'iniciatico' })
 });
 checar(rtl.status === 201, 'nome com override RTL é aceito');
 if (rtl.status === 201) {
@@ -269,7 +269,7 @@ if (rtl.status === 201) {
   await sql`delete from run where id = ${rtl.json.runId}`;
 }
 
-const sqlNoQuery = await bater("/ranking?dificuldade=escudeiro'%20or%201=1--", { method: 'GET' });
+const sqlNoQuery = await bater("/ranking?dificuldade=iniciatico'%20or%201=1--", { method: 'GET' });
 checar(sqlNoQuery.status === 400, 'dificuldade inválida na query é recusada por allowlist');
 
 const limiteMaluco = await bater('/ranking?limite=999999', { method: 'GET' });

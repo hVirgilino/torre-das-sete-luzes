@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
-import { FONTS, GAME_HEIGHT, GAME_WIDTH, MAX_ESTRELAS } from '../data/config';
+import {
+  DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH, MAX_ESTRELAS, type DifficultyId
+} from '../data/config';
 import { Audio } from './audio';
 import { uiPx } from './display';
 
@@ -27,13 +29,18 @@ const TEXTURA_PODIO: Record<Exclude<EstiloEstrela, 'padrao'>, string> = {
   bronze: 'star-bronze'
 };
 
+/**
+ * @param estilos brilho de cada posição da vitrine. Cada estrela representa uma
+ *   dificuldade, e o estilo dela vem da colocação do jogador **naquela**
+ *   dificuldade — três lendárias significam três primeiros lugares distintos.
+ */
 export function makeStarRow(
   scene: Phaser.Scene,
   x: number,
   y: number,
   earned: number,
   scale = 1,
-  estilo: EstiloEstrela = 'padrao'
+  estilos: EstiloEstrela[] = []
 ): { container: Phaser.GameObjects.Container; stars: Phaser.GameObjects.Sprite[] } {
   const gap = 46 * scale;
   const stars: Phaser.GameObjects.Sprite[] = [];
@@ -44,10 +51,20 @@ export function makeStarRow(
       .setScale(scale);
     // o brilho de pódio só vale para estrela já conquistada: o lugar vazio
     // continua apagado, senão a vitrine mentiria sobre o que falta vencer
+    const estilo = estilos[i] ?? 'padrao';
     if (on && estilo !== 'padrao') aplicarEstiloEstrela(sp, estilo, i);
     stars.push(sp);
   }
   return { container: scene.add.container(x, y, stars), stars };
+}
+
+/**
+ * Dificuldade de cada posição da vitrine, deduzida do próprio catálogo: a
+ * estrela `i` pertence à dificuldade que concede `i + 1` estrelas. Assim a
+ * ordem nunca sai de sincronia com DIFFICULTIES.
+ */
+export function dificuldadeDaEstrela(indice: number): DifficultyId | undefined {
+  return DIFFICULTIES.find((d) => d.estrelas === indice + 1)?.id;
 }
 
 /** Troca uma estrela já acesa pelo brilho de pódio, com defasagem entre elas. */

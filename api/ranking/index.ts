@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '../_lib/db';
 import { exigirMetodo, json, rota } from '../_lib/http';
-import { DIFICULDADES, dificuldade, type Dificuldade } from '../_lib/validar';
+import {
+  DIFICULDADES_RANQUEAVEIS, dificuldadeRanqueavel, type DificuldadeRanqueavel
+} from '../_lib/validar';
 
 interface Linha {
   id: string;
@@ -27,9 +29,9 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
 
   const q = req.query.dificuldade;
   const alvo = Array.isArray(q) ? q[0] : q;
-  const dificuldades: Dificuldade[] = alvo
-    ? [dificuldade(alvo)]
-    : [...DIFICULDADES];
+  const dificuldades: DificuldadeRanqueavel[] = alvo
+    ? [dificuldadeRanqueavel(alvo)]
+    : [...DIFICULDADES_RANQUEAVEIS];
 
   const bruto = Number(Array.isArray(req.query.limite) ? req.query.limite[0] : req.query.limite);
   const limite = Number.isInteger(bruto) && bruto > 0 ? Math.min(bruto, LIMITE_MAXIMO) : LIMITE_PADRAO;

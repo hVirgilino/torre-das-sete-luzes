@@ -1,9 +1,14 @@
 import Phaser from 'phaser';
-import { DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
-import { Api, entradasPublicadas, type EntradaRanking } from '../systems/api';
+import { FONTS, GAME_HEIGHT, GAME_WIDTH, dificuldadePorId } from '../data/config';
+import {
+  Api, DIFICULDADES_RANQUEAVEIS, entradasPublicadas, type EntradaRanking
+} from '../systems/api';
 import { formatClock } from '../systems/state';
 import { fadeOut, makeButton } from '../systems/ui';
 import { initSceneView, uiPx } from '../systems/display';
+
+/** Escudeiro fica de fora: é o modo de aprendizado, não de disputa. */
+const ABAS = DIFICULDADES_RANQUEAVEIS.map((id) => dificuldadePorId(id)!);
 
 /** cor da linha por colocação — combina com as estrelas de pódio */
 const COR_POSICAO = ['#ffe9a8', '#dfe7ff', '#ffbf7a'];
@@ -34,8 +39,8 @@ export class RankingScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // abas de dificuldade
-    DIFFICULTIES.forEach((d, i) => {
-      const x = GAME_WIDTH / 2 + (i - (DIFFICULTIES.length - 1) / 2) * 150;
+    ABAS.forEach((d, i) => {
+      const x = GAME_WIDTH / 2 + (i - (ABAS.length - 1) / 2) * 170;
       const aba = this.add
         .text(x, 92, d.nome, {
           fontFamily: FONTS.display, fontSize: uiPx(17), color: '#aeb8e8'
@@ -85,7 +90,7 @@ export class RankingScene extends Phaser.Scene {
   }
 
   private async carregar() {
-    const dif = DIFFICULTIES[this.dificuldadeAtual];
+    const dif = ABAS[this.dificuldadeAtual];
     this.limparLinhas();
     this.aviso.setText('Consultando os arautos...').setVisible(true);
 

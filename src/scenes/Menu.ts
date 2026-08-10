@@ -7,10 +7,10 @@ import { nextTrack, trackById, TRACKS } from '../data/tracks';
 import { State, formatClock } from '../systems/state';
 import { Audio } from '../systems/audio';
 import {
-  makeButton, makeSlider, makeStarRow, aplicarEstiloEstrela, estiloPorPosicao, fadeOut,
-  type EstiloEstrela
+  makeButton, makeSlider, makeStarRow, aplicarEstiloEstrela, estiloPorPosicao,
+  dificuldadeDaEstrela, fadeOut, type EstiloEstrela
 } from '../systems/ui';
-import { Api, ErroApi, entradasPublicadas } from '../systems/api';
+import { Api, ErroApi, entradasPublicadas, ehRanqueavel } from '../systems/api';
 import { Ranqueado } from '../systems/ranqueado';
 import { pedirTexto } from '../systems/modal';
 import {
@@ -117,29 +117,26 @@ export class MenuScene extends Phaser.Scene {
    * dificuldade já vencida — a vitrine de quem faz speedrun.
    */
   private buildTrophies() {
-    // ?podio=lenda|platina|bronze|todos força o brilho sem precisar de ranking
-    // — é o único jeito de conferir a arte antes de existir um top 3 de verdade
-    const forcado = new URLSearchParams(location.search).get('podio');
-    if (forcado === 'todos') return this.mostrarVitrinePodio();
+    // ?podio=lenda|platina|bronze força o brilho sem precisar de ranking — é o
+    // único jeito de conferir a arte antes de existir um top 3 de verdade
+    const forcado = new URLSearchParams(location.search).get('podio') as EstiloEstrela | null;
 
     const { container, stars } = makeStarRow(
-      this, GAME_WIDTH / 2, 222, State.stars || MAX_ESTRELAS, 0.8,
-      (forcado as EstiloEstrela) ?? 'padrao'
+      this, GAME_WIDTH - 78, GAME_HEIGHT - 30, forcado ? MAX_ESTRELAS : State.stars, 0.62,
+      forcado ? Array(MAX_ESTRELAS).fill(forcado) : []
     );
+    container.setDepth(20);
     this.menuItems.push(container);
-    // as acesas respiram devagar; os lugares vazios ficam quietos e opacos
     stars.forEach((s, i) => {
-      if (i < State.stars) {
-        this.tweens.add({
-          targets: s, scale: { from: 0.8, to: 0.88 },
-          duration: 1500, yoyo: true, repeat: -1, ease: 'sine.inout', delay: i * 260
-        });
-      } else {
-        s.setAlpha(0.5);
-      }
+      if (i >= State.stars && !forcado) s.setAlpha(0.45);
     });
     if (!forcado) this.aplicarBrilhoDePodio(stars);
 
+    this.buildRecordes();
+  }
+
+  /** Melhores tempos locais, no canto oposto às estrelas. */
+  private buildRecordes() {
     const vencidas = DIFFICULTIES.filter((d) => State.trophies.records[d.id] !== undefined);
     if (!vencidas.length) return;
 
@@ -167,53 +164,37 @@ export class MenuScene extends Phaser.Scene {
     this.menuItems.push(this.add.container(24, 26, kids));
   }
 
-  /** Os três estilos lado a lado, para conferir a arte de uma vez só. */
-  private mostrarVitrinePodio() {
-    const linhas: [EstiloEstrela, string][] = [
-      ['lenda', '1º — lendária'],
-      ['platina', '2º — platina'],
-      ['bronze', '3º — bronze']
-    ];
-    linhas.forEach(([estilo, rotulo], i) => {
-      const y = 190 + i * 78;
-      const { container } = makeStarRow(this, GAME_WIDTH / 2 + 40, y, MAX_ESTRELAS, 0.9, estilo);
-      this.menuItems.push(container);
-      this.menuItems.push(
-        this.add
-          .text(GAME_WIDTH / 2 - 150, y, rotulo, {
-            fontFamily: FONTS.display, fontSize: '16px', color: '#f3e6c4'
-          })
-          .setOrigin(1, 0.5)
-      );
-    });
-  }
-
   /**
-   * Pergunta ao servidor a melhor colocação deste navegador e, se for pódio,
-   * troca as estrelas pelo brilho correspondente.
+   * Pinta cada estrela com a colocação do jogador **na dificuldade dela**.
    *
-   * Assíncrono e tolerante a falha de propósito: sem rede, ou rodando fora da
-   * Vercel, o menu simplesmente fica com as estrelas douradas de sempre.
+   * A estrela 1 é do Iniciático, a 2 do DeMolay, a 3 do Cavaleiro. Três
+   * lendárias significam três primeiros lugares distintos, não um só repetido.
+   *
+   * Assíncrono e tolerante a falha: sem rede, ou rodando fora da Vercel, as
+   * estrelas ficam douradas e o menu não pisca.
    */
   private async aplicarBrilhoDePodio(stars: Phaser.GameObjects.Sprite[]) {
     const entradas = entradasPublicadas();
     if (!entradas.length || !State.stars) return;
     try {
-      const { melhor } = await Api.minhasColocacoes(entradas);
-      const estilo = estiloPorPosicao(melhor?.posicao);
-      if (estilo === 'padrao') return;
-      // a cena pode ter sido trocada enquanto o pedido ia e voltava
+      const { posicoes } = await Api.minhasColocacoes(entradas);
       if (!this.scene.isActive()) return;
-      stars.forEach((s, i) => {
-        if (i < State.stars && s.active) aplicarEstiloEstrela(s, estilo, i);
+
+      // várias publicações na mesma dificuldade: vale a melhor colocação
+      const melhorPorDificuldade = new Map<string, number>();
+      for (const p of posicoes) {
+        const atual = melhorPorDificuldade.get(p.dificuldade);
+        if (atual === undefined || p.posicao < atual) {
+          melhorPorDificuldade.set(p.dificuldade, p.posicao);
+        }
+      }
+
+      stars.forEach((sp, i) => {
+        if (i >= State.stars || !sp.active) return;
+        const dif = dificuldadeDaEstrela(i);
+        const estilo = estiloPorPosicao(dif ? melhorPorDificuldade.get(dif) : undefined);
+        if (estilo !== 'padrao') aplicarEstiloEstrela(sp, estilo, i);
       });
-      const rotulo = { lenda: '1º do mundo', platina: '2º do mundo', bronze: '3º do mundo' }[estilo];
-      const faixa = this.add
-        .text(GAME_WIDTH / 2, 252, `★ ${rotulo} · ${dificuldadePorId(melhor!.dificuldade)?.nome ?? ''}`, {
-          fontFamily: FONTS.display, fontSize: '14px', color: '#ffc24d'
-        })
-        .setOrigin(0.5);
-      this.menuItems.push(faixa);
     } catch {
       /* ranking indisponível — o menu não deve nem piscar por causa disso */
     }
@@ -266,7 +247,8 @@ export class MenuScene extends Phaser.Scene {
   // ------------------------------------------------------------- vitrola
   private buildVitrola() {
     const x = GAME_WIDTH - 70;
-    const y = GAME_HEIGHT - 64;
+    // subiu para abrir espaço às estrelas, que agora ficam no canto de baixo
+    const y = GAME_HEIGHT - 84;
 
     const box = this.add.image(0, 0, 'vitrola').setOrigin(0.5, 1);
     const disc = this.add.image(-12, -12, 'vitrola-disc').setScale(1.3);
@@ -342,6 +324,13 @@ export class MenuScene extends Phaser.Scene {
   private async iniciarRanqueada() {
     if (this.optionsPanel) this.toggleOptions();
     const dif = State.settings.difficulty;
+    if (!ehRanqueavel(dif)) {
+      this.mostrarAviso(
+        `O modo ${dificuldadePorId(dif)?.nome} não entra no ranking.\n` +
+          'Escolha Iniciático, DeMolay ou Cavaleiro nas Opções.'
+      );
+      return;
+    }
     const nome = await pedirTexto({
       titulo: 'Partida ranqueada',
       dica: 'Nome do cavaleiro',

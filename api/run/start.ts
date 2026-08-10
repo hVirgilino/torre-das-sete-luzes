@@ -3,7 +3,7 @@ import { sql } from '../_lib/db';
 import { corpoJson, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http';
 import { assinarToken, hashIp } from '../_lib/cripto';
 import { limitar } from '../_lib/limite';
-import { dificuldade, textoObrigatorio, LIMITE_NOME } from '../_lib/validar';
+import { dificuldadeRanqueavel, textoObrigatorio, LIMITE_NOME } from '../_lib/validar';
 import { estadoPublico, velasIniciais, type Corrida } from '../_lib/corrida';
 
 /**
@@ -22,7 +22,8 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
   await limitar(`run:start:${ip ?? 'sem-ip'}`, 30, 3600);
 
   const nome = textoObrigatorio(corpo.nome, LIMITE_NOME, 'nome');
-  const dif = dificuldade(corpo.dificuldade);
+  // Escudeiro não abre corrida: não haveria onde publicar o resultado
+  const dif = dificuldadeRanqueavel(corpo.dificuldade);
 
   const linhas = (await sql`
     insert into run (nome, dificuldade, velas, ip_hash)

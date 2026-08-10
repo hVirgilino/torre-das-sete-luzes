@@ -192,3 +192,13 @@ export function guardarEntrada(entrada: EntradaPublicada) {
     /* storage indisponível — perde só o brilho de pódio */
   }
 }
+
+/**
+ * Dificuldades que entram no ranking. Escudeiro fica de fora: com 20s por
+ * questão e duas alternativas, o tempo mede digitação, não domínio da
+ * Cerimônia. Precisa espelhar DIFICULDADES_RANQUEAVEIS do servidor.
+ */
+export const DIFICULDADES_RANQUEAVEIS = ['iniciatico', 'demolay', 'cavaleiro'] as const;
+
+export const ehRanqueavel = (id: string): boolean =>
+  (DIFICULDADES_RANQUEAVEIS as readonly string[]).includes(id);

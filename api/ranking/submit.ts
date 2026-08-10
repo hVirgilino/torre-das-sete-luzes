@@ -3,7 +3,7 @@ import { sql } from '../_lib/db';
 import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http';
 import { assinarToken, hashIp } from '../_lib/cripto';
 import { limitar } from '../_lib/limite';
-import { textoOpcional, LIMITE_CAPITULO } from '../_lib/validar';
+import { dificuldadeRanqueavel, textoOpcional, LIMITE_CAPITULO } from '../_lib/validar';
 import { carregarCorrida, type Corrida } from '../_lib/corrida';
 
 /**
@@ -24,6 +24,10 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
   if (corrida.status !== 'concluida' || !corrida.duracao_ms) {
     throw new ErroHttp(409, 'esta corrida não foi concluída');
   }
+
+  // guarda redundante: run/start já barra, mas uma corrida antiga no banco
+  // não pode virar linha de ranking numa dificuldade que saiu da disputa
+  dificuldadeRanqueavel(corrida.dificuldade);
 
   const capitulo = textoOpcional(corpo.capitulo, LIMITE_CAPITULO);
 
