@@ -2,7 +2,9 @@ import {
   DifficultyId,
   DIFFICULTIES,
   Difficulty,
-  LOCKS_PER_FLOOR,
+  TOTAL_VELAS,
+  dificuldadePorId,
+  trancasDe,
   ResolutionId,
   TrackId,
   UI_SCALES
@@ -114,7 +116,12 @@ function sanitizeSave(raw: unknown): SaveData | null {
   const r = raw as Record<string, unknown>;
   if (!Array.isArray(r.candles)) return null;
 
-  const candles: CandleState[] = LOCKS_PER_FLOOR.map((max, i) => {
+  // a dificuldade decide quantas trancas cada vela tem, então ela é lida
+  // antes de sanear as velas
+  const dif = isDifficultyId(r.difficulty) ? r.difficulty : 'escudeiro';
+  const tabela = dificuldadePorId(dif)!.trancas;
+
+  const candles: CandleState[] = tabela.map((max: number, i: number) => {
     const c = (r.candles as unknown[])[i];
     const cc = (c && typeof c === 'object' ? c : {}) as Record<string, unknown>;
     const locks =
@@ -126,12 +133,12 @@ function sanitizeSave(raw: unknown): SaveData | null {
 
   const floor =
     typeof r.floor === 'number' && Number.isFinite(r.floor)
-      ? Math.min(LOCKS_PER_FLOOR.length + 1, Math.max(1, Math.round(r.floor)))
+      ? Math.min(TOTAL_VELAS + 1, Math.max(1, Math.round(r.floor)))
       : 1;
 
   return {
     playerName: (typeof r.playerName === 'string' ? r.playerName.trim().slice(0, 24) : '') || 'Galahad',
-    difficulty: isDifficultyId(r.difficulty) ? r.difficulty : 'escudeiro',
+    difficulty: dif,
     candles,
     floor,
     protectionActive: r.protectionActive === true,
@@ -290,7 +297,10 @@ class GameStateManager {
     this.save = {
       playerName: playerName.trim() || 'Galahad',
       difficulty: this.settings.difficulty,
-      candles: LOCKS_PER_FLOOR.map((locks) => ({ locks, lit: false })),
+      candles: dificuldadePorId(this.settings.difficulty)!.trancas.map((locks: number) => ({
+        locks,
+        lit: false
+      })),
       floor: 1,
       protectionActive: false,
       finished: false,
@@ -340,7 +350,7 @@ class GameStateManager {
   }
 
   resetLocks(vela: number) {
-    this.candle(vela).locks = LOCKS_PER_FLOOR[vela - 1];
+    this.candle(vela).locks = trancasDe(this.difficulty, vela);
     this.persistSave();
   }
 
@@ -359,7 +369,7 @@ class GameStateManager {
     }
     const c = this.candle(vela);
     c.lit = false;
-    c.locks = Math.min(LOCKS_PER_FLOOR[vela - 1], c.locks + locksReturned);
+    c.locks = Math.min(trancasDe(this.difficulty, vela), c.locks + locksReturned);
     this.persistSave();
     return true;
   }

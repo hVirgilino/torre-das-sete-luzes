@@ -4,6 +4,7 @@ import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http.js';
 import { inteiro, uuid } from '../_lib/validar.js';
 import {
   carregarCorrida,
+  dificuldadeDa,
   estadoPublico,
   removerTranca,
   reporTrancas,
@@ -53,7 +54,7 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
   if (acertou) {
     removerTranca(velas, pergunta.vela);
   } else if (!pergunta.sem_reset) {
-    reporTrancas(velas, pergunta.vela);
+    reporTrancas(velas, pergunta.vela, dificuldadeDa(corrida));
   }
 
   // o UPDATE condicional em respondida_em fecha a corrida entre dois envios

@@ -5,6 +5,7 @@ import { assinarToken, hashIp } from '../_lib/cripto.js';
 import { limitar } from '../_lib/limite.js';
 import { dificuldadeRanqueavel, textoObrigatorio, LIMITE_NOME } from '../_lib/validar.js';
 import { estadoPublico, velasIniciais, type Corrida } from '../_lib/corrida.js';
+import { dificuldadePorId } from '../../src/data/difficulty.js';
 
 /**
  * Abre uma partida ranqueada.
@@ -27,7 +28,7 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
 
   const linhas = (await sql`
     insert into run (nome, dificuldade, velas, ip_hash)
-    values (${nome}, ${dif}, ${JSON.stringify(velasIniciais())}::jsonb, ${ip})
+    values (${nome}, ${dif}, ${JSON.stringify(velasIniciais(dificuldadePorId(dif)!))}::jsonb, ${ip})
     returning id, nome, dificuldade, status, velas, protecao_ativa, historico,
               acertos, erros, iniciada_em, concluida_em, duracao_ms
   `) as unknown as Corrida[];

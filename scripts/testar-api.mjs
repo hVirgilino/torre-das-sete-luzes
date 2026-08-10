@@ -95,7 +95,12 @@ for (let vela = 1; vela <= 7; vela++) {
   const l = await chamar(rotas.light, { corpo: { runId, token, vela } });
   if (l.status !== 200) checar(false, `acender vela ${vela}`, JSON.stringify(l.corpo));
 }
-checar(perguntasFeitas === 35, `exigiu as 35 respostas certas do desafio (foram ${perguntasFeitas})`);
+// o total depende da dificuldade: cada modo tem sua tabela de trancas
+const ESPERADO = 2 + 2 + 2 + 4 + 4 + 4 + 4; // iniciático: [2,2,2,4,4,4,4]
+checar(
+  perguntasFeitas === ESPERADO,
+  `exigiu as ${ESPERADO} respostas certas do modo iniciático (foram ${perguntasFeitas})`
+);
 
 const fim = await chamar(rotas.finish, { corpo: { runId, token } });
 checar(fim.status === 200 && fim.corpo.duracaoMs > 0, 'finish fecha e cronometra no servidor');

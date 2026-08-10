@@ -3,9 +3,10 @@ import { ErroHttp } from './http.js';
 import { tokenValido } from './cripto.js';
 import { uuid, inteiro } from './validar.js';
 import {
-  LOCKS_PER_FLOOR,
   LOCKS_RETURNED_ON_ABILITY,
+  TOTAL_VELAS as VELAS_DA_TORRE,
   dificuldadePorId,
+  trancasDe,
   type Difficulty
 } from '../../src/data/difficulty.js';
 import type { QuestionHistory } from '../../src/systems/questions.js';
@@ -30,7 +31,7 @@ export interface Corrida {
   duracao_ms: number | null;
 }
 
-export const TOTAL_VELAS = 7;
+export const TOTAL_VELAS = VELAS_DA_TORRE;
 
 /**
  * Folga de rede somada ao prazo da questão. Sem ela, quem joga em 4G perderia
@@ -42,8 +43,8 @@ export const FOLGA_REDE_MS = 1500;
 /** Tempo sem interação que faz uma corrida ser considerada abandonada. */
 export const OCIOSA_MS = 30 * 60 * 1000;
 
-export const velasIniciais = (): Vela[] =>
-  LOCKS_PER_FLOOR.map((locks) => ({ locks, lit: false }));
+export const velasIniciais = (d: Difficulty): Vela[] =>
+  d.trancas.map((locks) => ({ locks, lit: false }));
 
 export const todasAcesas = (velas: Vela[]) =>
   velas.length === TOTAL_VELAS && velas.every((v) => v.lit && v.locks === 0);
@@ -99,8 +100,8 @@ export function removerTranca(velas: Vela[], vela: number) {
   if (v.locks > 0) v.locks--;
 }
 
-export function reporTrancas(velas: Vela[], vela: number) {
-  velas[vela - 1].locks = LOCKS_PER_FLOOR[vela - 1];
+export function reporTrancas(velas: Vela[], vela: number, d: Difficulty) {
+  velas[vela - 1].locks = trancasDe(d, vela);
 }
 
 export function acenderVela(velas: Vela[], vela: number): boolean {
@@ -114,12 +115,13 @@ export function acenderVela(velas: Vela[], vela: number): boolean {
 export function apagarPorHabilidade(
   velas: Vela[],
   vela: number,
-  protecaoAtiva: boolean
+  protecaoAtiva: boolean,
+  d: Difficulty
 ): { apagou: boolean; protecaoAtiva: boolean } {
   if (protecaoAtiva) return { apagou: false, protecaoAtiva: false };
   const v = velas[vela - 1];
   v.lit = false;
-  v.locks = Math.min(LOCKS_PER_FLOOR[vela - 1], v.locks + LOCKS_RETURNED_ON_ABILITY);
+  v.locks = Math.min(trancasDe(d, vela), v.locks + LOCKS_RETURNED_ON_ABILITY);
   return { apagou: true, protecaoAtiva };
 }
 

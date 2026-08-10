@@ -2,10 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '../_lib/db.js';
 import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http.js';
 import { carregarCorrida, dificuldadeDa, todasAcesas, type Corrida } from '../_lib/corrida.js';
-import { LOCKS_PER_FLOOR } from '../../src/data/difficulty.js';
+import { acertosMinimos } from '../../src/data/difficulty.js';
 
-/** Mínimo de respostas certas para vencer, se nunca se errar: 2+3+4+5+6+7+8. */
-const ACERTOS_MINIMOS = LOCKS_PER_FLOOR.reduce((s, n) => s + n, 0);
+
 
 /**
  * Encerra a corrida e congela o tempo.
@@ -21,7 +20,8 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
   const corrida = await carregarCorrida(corpo);
 
   if (!todasAcesas(corrida.velas)) throw new ErroHttp(409, 'as sete luzes ainda não arderam');
-  if (corrida.acertos < ACERTOS_MINIMOS) {
+  // mínimo de acertos se nunca se errar — varia com a dificuldade
+  if (corrida.acertos < acertosMinimos(dificuldadeDa(corrida))) {
     throw new ErroHttp(409, 'a contagem de acertos não fecha com o desafio');
   }
 

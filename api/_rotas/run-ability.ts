@@ -4,6 +4,7 @@ import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http.js';
 import {
   apagarPorHabilidade,
   carregarCorrida,
+  dificuldadeDa,
   estadoPublico,
   removerTranca,
   velaValida,
@@ -47,7 +48,7 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
 
   // custo, idêntico ao modo casual: a vela apaga e uma tranca volta,
   // a menos que o Voto de Fidelidade esteja pendente
-  const custo = apagarPorHabilidade(velas, vela, corrida.protecao_ativa);
+  const custo = apagarPorHabilidade(velas, vela, corrida.protecao_ativa, dificuldadeDa(corrida));
   let protecaoAtiva = custo.protecaoAtiva;
 
   const erradas = pergunta.opcoes

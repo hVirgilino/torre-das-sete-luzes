@@ -436,6 +436,7 @@ export class TowerScene extends Phaser.Scene {
         this.scene.start('Menu');
       });
     this.hudLayer.add(menuBtn);
+    this.buildBotaoDebug();
 
     // no touch o prompt sobe: os direcionais ocupam a faixa de baixo
     this.promptText = this.add
@@ -449,6 +450,46 @@ export class TowerScene extends Phaser.Scene {
     this.hudLayer.add(this.promptText);
 
     this.refreshHUD();
+  }
+
+  /**
+   * Atalho de depuração: derruba todas as trancas e acende as sete velas.
+   *
+   * Só no modo casual, de propósito. Numa corrida ranqueada quem manda é o
+   * servidor — ele conta os acertos e recusaria o `finish`. Um botão que
+   * "funciona" na tela e depois falha no fim seria pior que não existir.
+   */
+  private buildBotaoDebug() {
+    if (Ranqueado.ativo) return;
+
+    const btn = this.add
+      .text(GAME_WIDTH - 24, 44, '⚑ debug: acender tudo', {
+        fontFamily: FONTS.body,
+        fontSize: uiPx(13),
+        color: '#8890b8',
+        backgroundColor: 'rgba(6,10,28,0.75)',
+        padding: { x: 8, y: 4 }
+      })
+      .setOrigin(1, 0)
+      .setDepth(901)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerover', () => btn.setColor('#ffc24d'))
+      .on('pointerout', () => btn.setColor('#8890b8'))
+      .on('pointerdown', () => {
+        for (let vela = 1; vela <= 7; vela++) {
+          const c = State.candle(vela);
+          c.locks = 0;
+          c.lit = true;
+        }
+        State.persistSave();
+        Audio.candleLight();
+        this.cameras.main.flash(220, 255, 194, 77);
+        this.refreshStations();
+        this.refreshHUD();
+        this.refreshGate();
+        this.avisar('Sete luzes acesas — o Rei aguarda no 8º andar.');
+      });
+    this.hudLayer.add(btn);
   }
 
   private refreshHUD() {

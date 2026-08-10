@@ -26,16 +26,33 @@ export interface Difficulty {
   estrelas: number;
   /** o que o Rei diz na tela de fim de jogo neste modo */
   mensagemFinal: string;
+  /** trancas de cada vela (índice 0 = vela/andar 1) */
+  trancas: number[];
 }
 
 /** Total de estrelas possíveis — a vitrine do menu tem sempre este tamanho. */
 export const MAX_ESTRELAS = 3;
 
 /**
- * Trancas por andar (índice 0 = andar 1) — progressão crescente: o andar N tem N+1 trancas.
- * Para outra curva, basta trocar o array, ex.: [2, 4, 6, 8, 10, 12, 14].
+ * Trancas por vela, por dificuldade — a curva de esforço de cada modo.
+ * O Escudeiro é uma passada de reconhecimento; o Cavaleiro é a maratona.
  */
-export const LOCKS_PER_FLOOR = [2, 3, 4, 5, 6, 7, 8];
+const TRANCAS = {
+  escudeiro: [1, 1, 1, 1, 1, 1, 1],
+  iniciatico: [2, 2, 2, 4, 4, 4, 4],
+  demolay: [1, 2, 3, 4, 5, 6, 7],
+  cavaleiro: [2, 4, 6, 8, 10, 12, 14]
+} as const;
+
+/** Número de velas da Torre — a contagem não muda com a dificuldade. */
+export const TOTAL_VELAS = 7;
+
+/** Trancas de uma vela na dificuldade dada. */
+export const trancasDe = (d: Difficulty, vela: number): number => d.trancas[vela - 1];
+
+/** Total de respostas certas para vencer sem errar nenhuma. */
+export const acertosMinimos = (d: Difficulty): number =>
+  d.trancas.reduce((s, n) => s + n, 0);
 
 /** Trancas que retornam ao usar a habilidade daquela vela */
 export const LOCKS_RETURNED_ON_ABILITY = 1;
@@ -43,6 +60,7 @@ export const LOCKS_RETURNED_ON_ABILITY = 1;
 export const DIFFICULTIES: Difficulty[] = [
   {
     id: 'escudeiro',
+    trancas: [...TRANCAS.escudeiro],
     nome: 'Escudeiro',
     descricao: '20s · 2 opções · poucas palavras',
     tempo: 20,
@@ -56,6 +74,7 @@ export const DIFFICULTIES: Difficulty[] = [
   },
   {
     id: 'iniciatico',
+    trancas: [...TRANCAS.iniciatico],
     nome: 'Iniciático',
     descricao: '15s · 3 opções · mais palavras',
     tempo: 15,
@@ -69,6 +88,7 @@ export const DIFFICULTIES: Difficulty[] = [
   },
   {
     id: 'demolay',
+    trancas: [...TRANCAS.demolay],
     nome: 'DeMolay',
     descricao: '10s · 4 opções · frases inteiras',
     tempo: 10,
@@ -82,6 +102,7 @@ export const DIFFICULTIES: Difficulty[] = [
   },
   {
     id: 'cavaleiro',
+    trancas: [...TRANCAS.cavaleiro],
     nome: 'Cavaleiro',
     descricao: '5s · 4 opções · frases inteiras',
     tempo: 5,

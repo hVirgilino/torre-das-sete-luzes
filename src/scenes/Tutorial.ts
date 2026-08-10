@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FONTS, GAME_HEIGHT, GAME_WIDTH, LOCKS_PER_FLOOR } from '../data/config';
+import { FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
 import { State } from '../systems/state';
 import { makeButton, fadeIn, fadeOut } from '../systems/ui';
 import { initSceneView, uiPx } from '../systems/display';
@@ -44,7 +44,8 @@ export class TutorialScene extends Phaser.Scene {
           'Trechos da Cerimônia da Luz surgirão com palavras faltando. Escolha a alternativa que ' +
           'preenche a lacuna corretamente.\n\nCada acerto quebra uma tranca. ' +
           `Errar — ou deixar o tempo acabar — restaura TODAS as trancas daquela vela. ` +
-          `As velas têm de ${Math.min(...LOCKS_PER_FLOOR)} a ${Math.max(...LOCKS_PER_FLOOR)} trancas — quanto mais alto o andar, mais trancas.`
+          `No modo ${State.difficulty.nome}, as velas têm de ${Math.min(...State.difficulty.trancas)} a ` +
+          `${Math.max(...State.difficulty.trancas)} trancas.`
       },
       {
         t: 'As Habilidades',
