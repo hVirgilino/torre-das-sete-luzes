@@ -25,6 +25,7 @@ const rotas = {
   ability: await carregar('_rotas/run-ability'),
   light: await carregar('_rotas/run-light'),
   finish: await carregar('_rotas/run-finish'),
+  debug: await carregar('_rotas/run-debug'),
   ranking: await carregar('_rotas/ranking-lista'),
   submit: await carregar('_rotas/ranking-submit'),
   me: await carregar('_rotas/ranking-me'),
@@ -252,6 +253,32 @@ checar(
   })).corpo.melhor === null,
   'reivindicar colocacao alheia sem token nao funciona'
 );
+
+secao('Atalho de depuração');
+
+const dbg = await chamar(rotas.start, { corpo: { nome: 'DebugBot', dificuldade: 'cavaleiro' } });
+checar(
+  (await chamar(rotas.debug, { corpo: { runId: dbg.corpo.runId, token: dbg.corpo.token } })).status === 401,
+  'run/debug sem sessao de moderacao da 401'
+);
+
+const ipDbg = '198.51.100.77';
+const loginDbg = await chamar(rotas.login, { corpo: { senha: 'Virgilino391' }, ip: ipDbg });
+const cookieDbg = (loginDbg.cabecalhos['set-cookie'] ?? '').split(';')[0];
+const acendeu = await chamar(rotas.debug, {
+  corpo: { runId: dbg.corpo.runId, token: dbg.corpo.token }, cookie: cookieDbg
+});
+checar(
+  acendeu.status === 200 && acendeu.corpo.completa === true,
+  'run/debug com sessao acende as sete velas',
+  JSON.stringify(acendeu.corpo?.erro ?? '')
+);
+const fimDbg = await chamar(rotas.finish, { corpo: { runId: dbg.corpo.runId, token: dbg.corpo.token } });
+checar(fimDbg.status === 200, 'finish aceita a corrida concluida pelo atalho', JSON.stringify(fimDbg.corpo));
+const subDbg = await chamar(rotas.submit, { corpo: { runId: dbg.corpo.runId, token: dbg.corpo.token } });
+checar(subDbg.status === 201, 'a corrida do atalho entra no ranking');
+if (subDbg.status === 201) await sql`delete from ranking where id = ${subDbg.corpo.entradaId}`;
+await sql`delete from run where id = ${dbg.corpo.runId}`;
 
 secao('Painel de moderação');
 

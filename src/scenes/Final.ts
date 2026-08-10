@@ -11,12 +11,17 @@ import { ErroApi } from '../systems/api';
 import { pedirTexto } from '../systems/modal';
 
 export class FinalScene extends Phaser.Scene {
+  private publicado = false;
+  private botaoRanking?: Phaser.GameObjects.Text;
+
   constructor() {
     super('Final');
   }
 
   create() {
     initSceneView(this);
+    this.publicado = false;
+    this.botaoRanking = undefined;
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'bg-throne');
     fadeIn(this, 800);
 
@@ -198,9 +203,27 @@ export class FinalScene extends Phaser.Scene {
       this.tweens.add({ targets: star, scale: { from: 0, to: 1.1 }, duration: 420, ease: 'back.out' });
     }
 
-    if (ranqueada) this.oferecerRanking(cx, D, dificuldade.nome);
+    if (ranqueada) {
+      this.oferecerRanking(cx, D, dificuldade.nome);
+    } else {
+      // sem esta linha o jogador acha que o ranking quebrou; na verdade a
+      // partida casual não tem corrida no servidor, então não há tempo
+      // verificável para publicar
+      this.add
+        .text(cx, GAME_HEIGHT - 96, 'Só partidas ranqueadas entram no ranking global.', {
+          fontFamily: FONTS.body, fontSize: '15px', fontStyle: 'italic', color: '#8890b8'
+        })
+        .setOrigin(0.5)
+        .setDepth(D);
+    }
 
     makeButton(this, cx, GAME_HEIGHT - 48, 'Voltar ao Menu', async () => {
+      // se a corrida ranqueada ainda não foi publicada, oferece antes de sair —
+      // é o último instante em que ela pode entrar no ranking
+      if (ranqueada && !this.publicado) {
+        const foi = await this.publicar(dificuldade.nome);
+        if (foi === 'cancelado') return;
+      }
       await fadeOut(this, 500);
       this.scene.start('Menu');
     }).setDepth(D);
@@ -211,28 +234,50 @@ export class FinalScene extends Phaser.Scene {
    * O nome já é o da corrida — aqui só se pergunta o capítulo, que é opcional.
    */
   private oferecerRanking(cx: number, D: number, modo: string) {
-    const botao = makeButton(this, cx, GAME_HEIGHT - 96, '⚑ Submeter ao ranking global', async () => {
-      const capitulo = await pedirTexto({
-        titulo: 'Submeter ao ranking',
-        dica: 'Capítulo ou ID DeMolay',
-        ajuda: 'Opcional — aparece ao lado do vosso nome na classificação pública. ' +
-          'Podeis deixar em branco.',
-        confirmar: 'Publicar',
-        maxLength: 48,
-        opcional: true
-      });
-      if (capitulo === null) return;
+    this.botaoRanking = makeButton(
+      this,
+      cx,
+      GAME_HEIGHT - 96,
+      '⚑ Submeter ao ranking global',
+      () => void this.publicar(modo),
+      18
+    ).setDepth(D);
+  }
 
-      botao.disableInteractive().setAlpha(0.5).setText('Enviando...');
-      try {
-        const r = await Ranqueado.submeter(capitulo.trim() || null);
-        Ranqueado.encerrar();
-        botao.setText(`✔ ${r.posicao}º lugar no modo ${modo}`).setColor('#8fbf6f');
-      } catch (erro) {
-        const msg = erro instanceof ErroApi ? erro.message : 'falha no envio';
-        botao.setText(`✕ ${msg}`).setColor('#ff8a8a');
-        botao.setInteractive({ useHandCursor: true }).setAlpha(1);
-      }
-    }, 18).setDepth(D);
+  /**
+   * Pede o capítulo e publica. Devolve o desfecho para quem chamou decidir se
+   * segue adiante — o botão "Voltar ao Menu" não deve sair se o jogador só
+   * fechou o modal sem querer.
+   */
+  private async publicar(modo: string): Promise<'publicado' | 'cancelado' | 'falhou'> {
+    if (this.publicado) return 'publicado';
+    const capitulo = await pedirTexto({
+      titulo: 'Submeter ao ranking',
+      dica: 'Capítulo ou ID DeMolay',
+      ajuda:
+        'Opcional — aparece ao lado do vosso nome na classificação pública. ' +
+        'Podeis deixar em branco.',
+      confirmar: 'Publicar',
+      maxLength: 48,
+      opcional: true
+    });
+    if (capitulo === null) return 'cancelado';
+
+    this.botaoRanking?.disableInteractive().setAlpha(0.5).setText('Enviando...');
+    try {
+      const r = await Ranqueado.submeter(capitulo.trim() || null);
+      Ranqueado.encerrar();
+      this.publicado = true;
+      this.botaoRanking?.setText(`✔ ${r.posicao}º lugar no modo ${modo}`).setColor('#8fbf6f');
+      return 'publicado';
+    } catch (erro) {
+      const msg = erro instanceof ErroApi ? erro.message : 'falha no envio';
+      this.botaoRanking
+        ?.setText(`✕ ${msg}`)
+        .setColor('#ff8a8a')
+        .setInteractive({ useHandCursor: true })
+        .setAlpha(1);
+      return 'falhou';
+    }
   }
 }

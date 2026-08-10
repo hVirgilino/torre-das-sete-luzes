@@ -5,6 +5,7 @@ import { Audio } from '../systems/audio';
 import { fadeIn, fadeOut } from '../systems/ui';
 import { renderScale, uiPx } from '../systems/display';
 import { Ranqueado } from '../systems/ranqueado';
+import { Api, ErroApi } from '../systems/api';
 
 const FLOOR_H = 160;
 const FLOORS = 8;
@@ -85,6 +86,8 @@ export class TowerScene extends Phaser.Scene {
   private touchButtons: TouchButton[] = [];
   private actionBtn?: Phaser.GameObjects.Container;
   private busy = false;
+  private saindo = false;
+  private confirmandoSaida = false;
   private lastStepSound = 0;
   private worldLayer!: Phaser.GameObjects.Layer;
   private hudLayer!: Phaser.GameObjects.Layer;
@@ -105,6 +108,8 @@ export class TowerScene extends Phaser.Scene {
     this.touchButtons = [];
     this.climbing = false;
     this.busy = false;
+    this.saindo = false;
+    this.confirmandoSaida = false;
     this.wantDown = false;
     this.prevUp = false;
 
@@ -421,20 +426,13 @@ export class TowerScene extends Phaser.Scene {
       .setDepth(901);
     this.hudLayer.add(this.floorText);
     const menuBtn = this.add
-      .text(GAME_WIDTH - 24, 16, '☰', { fontFamily: FONTS.display, fontSize: uiPx(22), color: '#ffc24d' })
+      .text(GAME_WIDTH - 24, 16, '‹ Voltar ao menu', {
+        fontFamily: FONTS.display, fontSize: uiPx(15), color: '#ffc24d'
+      })
       .setOrigin(1, 0)
       .setDepth(901)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', async () => {
-        // abandonar a Torre encerra a corrida ranqueada: ela é de sessão única
-        // e o relógio do servidor não para porque se voltou ao menu
-        Ranqueado.encerrar();
-        State.persistSave();
-        Audio.ambientStop();
-        await fadeOut(this, 400);
-        this.hudCam.fadeOut(400, 4, 6, 18);
-        this.scene.start('Menu');
-      });
+      .on('pointerdown', () => this.sairParaMenu());
     this.hudLayer.add(menuBtn);
     this.buildBotaoDebug();
 
@@ -453,6 +451,33 @@ export class TowerScene extends Phaser.Scene {
   }
 
   /**
+   * Sair da Torre. Numa corrida ranqueada isso a descarta, então confirma
+   * primeiro — antes o clique matava a corrida em silêncio e o jogador só
+   * descobria no fim, quando não aparecia opção de publicar no ranking.
+   */
+  private sairParaMenu() {
+    if (this.saindo) return;
+    if (Ranqueado.ativo && !this.confirmandoSaida) {
+      this.confirmandoSaida = true;
+      this.avisar(
+        'Sair descarta esta corrida ranqueada — ela é de sessão única\n' +
+          'e o relógio do servidor não para. Clique de novo para confirmar.'
+      );
+      this.time.delayedCall(4000, () => { this.confirmandoSaida = false; });
+      return;
+    }
+    this.saindo = true;
+    void (async () => {
+      Ranqueado.encerrar();
+      State.persistSave();
+      Audio.ambientStop();
+      await fadeOut(this, 400);
+      this.hudCam.fadeOut(400, 4, 6, 18);
+      this.scene.start('Menu');
+    })();
+  }
+
+  /**
    * Atalho de depuração: derruba todas as trancas e acende as sete velas.
    *
    * Só no modo casual, de propósito. Numa corrida ranqueada quem manda é o
@@ -460,8 +485,6 @@ export class TowerScene extends Phaser.Scene {
    * "funciona" na tela e depois falha no fim seria pior que não existir.
    */
   private buildBotaoDebug() {
-    if (Ranqueado.ativo) return;
-
     const btn = this.add
       .text(GAME_WIDTH - 24, 44, '⚑ debug: acender tudo', {
         fontFamily: FONTS.body,
@@ -475,21 +498,48 @@ export class TowerScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerover', () => btn.setColor('#ffc24d'))
       .on('pointerout', () => btn.setColor('#8890b8'))
-      .on('pointerdown', () => {
-        for (let vela = 1; vela <= 7; vela++) {
-          const c = State.candle(vela);
-          c.locks = 0;
-          c.lit = true;
-        }
-        State.persistSave();
-        Audio.candleLight();
-        this.cameras.main.flash(220, 255, 194, 77);
-        this.refreshStations();
-        this.refreshHUD();
-        this.refreshGate();
-        this.avisar('Sete luzes acesas — o Rei aguarda no 8º andar.');
-      });
+      .on('pointerdown', () => void this.acenderTudo(btn));
     this.hudLayer.add(btn);
+  }
+
+  /**
+   * Numa corrida ranqueada quem acende é o servidor: o cliente nunca conhece
+   * as respostas, então acender localmente só produziria uma tela mentindo e o
+   * `finish` recusaria depois. A rota exige sessão de moderação.
+   */
+  private async acenderTudo(btn: Phaser.GameObjects.Text) {
+    if (this.busy) return;
+    if (Ranqueado.ativo) {
+      this.busy = true;
+      btn.setText('⚑ acendendo...');
+      try {
+        const s = Ranqueado.exigir();
+        Ranqueado.espelhar(await Api.debugCompletar(s.runId, s.token));
+      } catch (erro: unknown) {
+        const msg = erro instanceof ErroApi && erro.status === 401
+          ? 'Faça login em /admin.html primeiro — o atalho exige sessão.'
+          : erro instanceof ErroApi ? erro.message : 'falha no atalho';
+        this.avisar(msg);
+        btn.setText('⚑ debug: acender tudo');
+        this.busy = false;
+        return;
+      }
+      btn.setText('⚑ debug: acender tudo');
+      this.busy = false;
+    } else {
+      for (let vela = 1; vela <= 7; vela++) {
+        const c = State.candle(vela);
+        c.locks = 0;
+        c.lit = true;
+      }
+      State.persistSave();
+    }
+    Audio.candleLight();
+    this.cameras.main.flash(220, 255, 194, 77);
+    this.refreshStations();
+    this.refreshHUD();
+    this.refreshGate();
+    this.avisar('Sete luzes acesas — o Rei aguarda no 8º andar.');
   }
 
   private refreshHUD() {

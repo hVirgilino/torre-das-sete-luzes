@@ -139,6 +139,10 @@ export const Api = {
   acender: (runId: string, token: string, vela: number) =>
     post<EstadoCorrida & { vela: number }>('/run/light', { runId, token, vela }),
 
+  /** atalho de teste: exige sessão de moderação (login em /admin.html) */
+  debugCompletar: (runId: string, token: string) =>
+    post<EstadoCorrida & { debug: boolean }>('/run/debug', { runId, token }),
+
   concluir: (runId: string, token: string) =>
     post<FimDeCorrida>('/run/finish', { runId, token }),
 
