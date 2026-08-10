@@ -8,51 +8,15 @@
  * e depois tenta quebrar cada regra (injection, forja de token, adulteração de
  * tempo, resposta repetida, brute force do admin...).
  */
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, readdirSync, statSync, writeFileSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { neon } from '@neondatabase/serverless';
 import { carregarEnv } from './env.mjs';
+import { compilarApi } from './compilar-api.mjs';
 
 carregarEnv();
-const raiz = new URL('..', import.meta.url).pathname;
 const sql = neon(process.env.DATABASE_URL);
+const { carregar, limpar } = compilarApi();
+process.on('exit', limpar);
 
-// --------------------------------------------------------------- compilação
-// dentro de node_modules porque o Node precisa achar @neondatabase/serverless
-// subindo a árvore a partir do arquivo compilado — em /tmp não acharia
-const saida = join(raiz, 'node_modules', '.torre-api-test');
-rmSync(saida, { recursive: true, force: true });
-mkdirSync(saida, { recursive: true });
-process.on('exit', () => rmSync(saida, { recursive: true, force: true }));
-
-execFileSync(
-  'npx',
-  ['tsc', '-p', 'api/tsconfig.json', '--noEmit', 'false', '--outDir', saida, '--module', 'esnext'],
-  { cwd: raiz, stdio: 'inherit' }
-);
-
-// tsc emite import sem extensão; Node exige extensão em ESM
-for (const arquivo of listar(saida)) {
-  if (!arquivo.endsWith('.js')) continue;
-  const txt = readFileSync(arquivo, 'utf8').replace(
-    /from '(\.[^']*)'/g,
-    (m, p) => (p.endsWith('.js') ? m : `from '${p}.js'`)
-  );
-  writeFileSync(arquivo, txt);
-}
-writeFileSync(join(saida, 'package.json'), '{"type":"module"}');
-
-function listar(dir) {
-  return readdirSync(dir).flatMap((n) => {
-    const p = join(dir, n);
-    return statSync(p).isDirectory() ? listar(p) : [p];
-  });
-}
-
-const base = join(saida, 'api');
-const carregar = async (rota) => (await import(pathToFileURL(join(base, rota + '.js')).href)).default;
 
 const rotas = {
   start: await carregar('run/start'),

@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import {
-  DESIGN_DX, DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH, dificuldadePorId
+  DESIGN_DX, DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH, MAX_ESTRELAS, dificuldadePorId
 } from '../data/config';
 import { MOON_X } from './Boot';
 import { nextTrack, trackById, TRACKS } from '../data/tracks';
 import { State, formatClock } from '../systems/state';
 import { Audio } from '../systems/audio';
 import {
-  makeButton, makeSlider, makeStarRow, aplicarEstiloEstrela, estiloPorPosicao, fadeOut
+  makeButton, makeSlider, makeStarRow, aplicarEstiloEstrela, estiloPorPosicao, fadeOut,
+  type EstiloEstrela
 } from '../systems/ui';
 import { Api, ErroApi, entradasPublicadas } from '../systems/api';
 import { Ranqueado } from '../systems/ranqueado';
@@ -116,7 +117,15 @@ export class MenuScene extends Phaser.Scene {
    * dificuldade já vencida — a vitrine de quem faz speedrun.
    */
   private buildTrophies() {
-    const { container, stars } = makeStarRow(this, GAME_WIDTH / 2, 222, State.stars, 0.8);
+    // ?podio=lenda|platina|bronze|todos força o brilho sem precisar de ranking
+    // — é o único jeito de conferir a arte antes de existir um top 3 de verdade
+    const forcado = new URLSearchParams(location.search).get('podio');
+    if (forcado === 'todos') return this.mostrarVitrinePodio();
+
+    const { container, stars } = makeStarRow(
+      this, GAME_WIDTH / 2, 222, State.stars || MAX_ESTRELAS, 0.8,
+      (forcado as EstiloEstrela) ?? 'padrao'
+    );
     this.menuItems.push(container);
     // as acesas respiram devagar; os lugares vazios ficam quietos e opacos
     stars.forEach((s, i) => {
@@ -129,7 +138,7 @@ export class MenuScene extends Phaser.Scene {
         s.setAlpha(0.5);
       }
     });
-    this.aplicarBrilhoDePodio(stars);
+    if (!forcado) this.aplicarBrilhoDePodio(stars);
 
     const vencidas = DIFFICULTIES.filter((d) => State.trophies.records[d.id] !== undefined);
     if (!vencidas.length) return;
@@ -156,6 +165,27 @@ export class MenuScene extends Phaser.Scene {
       );
     });
     this.menuItems.push(this.add.container(24, 26, kids));
+  }
+
+  /** Os três estilos lado a lado, para conferir a arte de uma vez só. */
+  private mostrarVitrinePodio() {
+    const linhas: [EstiloEstrela, string][] = [
+      ['lenda', '1º — lendária'],
+      ['platina', '2º — platina'],
+      ['bronze', '3º — bronze']
+    ];
+    linhas.forEach(([estilo, rotulo], i) => {
+      const y = 190 + i * 78;
+      const { container } = makeStarRow(this, GAME_WIDTH / 2 + 40, y, MAX_ESTRELAS, 0.9, estilo);
+      this.menuItems.push(container);
+      this.menuItems.push(
+        this.add
+          .text(GAME_WIDTH / 2 - 150, y, rotulo, {
+            fontFamily: FONTS.display, fontSize: '16px', color: '#f3e6c4'
+          })
+          .setOrigin(1, 0.5)
+      );
+    });
   }
 
   /**
