@@ -8,6 +8,9 @@ import { initSceneView } from '../systems/display';
 
 export class IntroScene extends Phaser.Scene {
   private dialog!: Dialog;
+  private skipped = false;
+  /** o modal do nome é único, seja pela cutscene ou pelo botão pular */
+  private nameAsked?: Promise<string>;
 
   constructor() {
     super('Intro');
@@ -15,6 +18,8 @@ export class IntroScene extends Phaser.Scene {
 
   create() {
     initSceneView(this);
+    this.skipped = false;
+    this.nameAsked = undefined;
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'bg-throne');
     this.dialog = new Dialog(this);
     fadeIn(this, 800);
@@ -24,12 +29,31 @@ export class IntroScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setDepth(2000)
       .setInteractive({ useHandCursor: true })
-      .once('pointerdown', () => {
-        if (!State.save) State.newGame('');
+      .once('pointerdown', async () => {
+        this.skipped = true;
+        skip.setVisible(false);
+        // pular a cutscene não pode pular a escolha do nome: sem ela o jogo
+        // seguia com "Galahad" e, se já houvesse save, com a campanha antiga
+        await this.ensureName();
         this.scene.start('Tutorial');
       });
 
     this.runCutscene().catch(() => {});
+  }
+
+  /**
+   * Abre o modal do nome (uma vez só) e inicia o jogo com ele. Chamado tanto
+   * pela cutscene quanto pelo botão pular — quem chegar primeiro abre, o outro
+   * espera a mesma promessa.
+   */
+  private ensureName(): Promise<string> {
+    if (!this.nameAsked) {
+      this.nameAsked = this.askName().then((nome) => {
+        State.newGame(nome);
+        return nome;
+      });
+    }
+    return this.nameAsked;
   }
 
   private askName(): Promise<string> {
@@ -84,8 +108,10 @@ export class IntroScene extends Phaser.Scene {
     await this.dialog.play([{ speaker: 'Merlin', text: 'Sim, majestade?' }]);
 
     // momento do nome
-    const nome = await this.askName();
-    State.newGame(nome);
+    await this.ensureName();
+    // se o jogador apertou pular enquanto o modal estava aberto, a cena já
+    // seguiu para o Tutorial e o resto da cutscene não deve rodar
+    if (this.skipped) return;
 
     await this.dialog.play([
       {

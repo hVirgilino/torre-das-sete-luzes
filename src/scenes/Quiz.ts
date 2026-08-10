@@ -7,6 +7,10 @@ import { initSceneView, uiPx } from '../systems/display';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 
+/** tinta das alternativas: escura no pergaminho, clara sobre o vermelho de erro */
+const OPT_INK = '#2c1c08';
+const OPT_INK_ERRADA = '#f3e6c4';
+
 interface OptionButton {
   container: Phaser.GameObjects.Container;
   bg: Phaser.GameObjects.Image;
@@ -113,7 +117,7 @@ export class QuizScene extends Phaser.Scene {
         .text(-optW / 2 + 14, 0, '', {
           fontFamily: FONTS.body,
           fontSize: uiPx(17),
-          color: '#2c1c08',
+          color: OPT_INK,
           wordWrap: { width: optW - 28 }
         })
         .setOrigin(0, 0.5);
@@ -323,6 +327,9 @@ export class QuizScene extends Phaser.Scene {
       o.disabled = false;
       o.bg.setTint(0xdcc494);
       o.text.setAlpha(1);
+      // sem isto, a alternativa que ficou vermelha entrega o texto claro para
+      // a pergunta seguinte e a opção nasce ilegível sobre o pergaminho
+      o.text.setColor(OPT_INK);
       if (visible) o.text.setText(`${LETTERS[i]} · ${opt}`);
     });
     this.refreshAbilityBar();
@@ -359,7 +366,7 @@ export class QuizScene extends Phaser.Scene {
       this.resolveCorrect(false);
     } else {
       btn.bg.setTint(0xa53434);
-      btn.text.setColor('#f3e6c4');
+      btn.text.setColor(OPT_INK_ERRADA);
       this.resolveWrong('Resposta incorreta!');
     }
   }

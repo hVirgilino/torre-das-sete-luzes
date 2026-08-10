@@ -284,6 +284,9 @@ class GameStateManager {
   }
 
   newGame(playerName: string) {
+    // zera antes de montar: um save antigo não pode sobreviver a um Novo Jogo
+    // nem por engano nem por um campo que se esqueça de redefinir aqui
+    this.clearSave();
     this.save = {
       playerName: playerName.trim() || 'Galahad',
       difficulty: this.settings.difficulty,
@@ -309,8 +312,10 @@ class GameStateManager {
     }
   }
 
+  /** Apaga o save do storage e da memória. Os troféus não são tocados. */
   clearSave() {
     this.save = null;
+    this.lastTick = null;
     try {
       localStorage.removeItem(SAVE_KEY);
     } catch {
