@@ -19,6 +19,10 @@ const sql = neon(process.env.DATABASE_URL);
 const { carregar, limpar } = compilarApi();
 process.on('exit', limpar);
 
+// zera o rate limit antes de começar: a suíte abre dezenas de corridas e o
+// teto de 30/hora por IP a barraria a partir da segunda execução seguida
+await sql`delete from rate_limit`;
+
 const ROTAS = {
   'run/start': await carregar('_rotas/run-start'),
   'run/question': await carregar('_rotas/run-question'),

@@ -43,12 +43,23 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
   if (!linhas.length) throw new ErroHttp(409, 'esta corrida já está no ranking');
   const id = linhas[0].id;
 
+  // A mesma janela usada pela listagem pública e por /ranking/me — as três
+  // precisam ordenar igual, senão o número anunciado aqui não bate com a tela.
+  //
+  // A versão anterior contava "quantos vêm antes" logo após o INSERT, e a
+  // própria linha recém-criada satisfazia a condição (mesmo tempo e criado_em
+  // anterior ao now() da consulta seguinte): ela se contava, e todo primeiro
+  // lugar era anunciado como segundo.
   const posicao = (await sql`
-    select count(*) + 1 as posicao
-      from ranking
-     where dificuldade = ${corrida.dificuldade} and oculto = false
-       and (duracao_ms < ${corrida.duracao_ms}
-            or (duracao_ms = ${corrida.duracao_ms} and criado_em < now()))
+    with classificado as (
+      select id,
+             row_number() over (
+               partition by dificuldade order by duracao_ms asc, criado_em asc
+             ) as posicao
+        from ranking
+       where oculto = false
+    )
+    select posicao from classificado where id = ${id}
   `) as unknown as { posicao: number }[];
 
   json(res, 201, {

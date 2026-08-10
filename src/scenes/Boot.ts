@@ -22,6 +22,7 @@ export class BootScene extends Phaser.Scene {
     this.makeCandle();
     this.makeLock();
     this.makeStars();
+    this.makeSombraMenu();
     this.makeKnight();
     this.makeCharacters();
     this.makeGlow();
@@ -596,6 +597,24 @@ export class BootScene extends Phaser.Scene {
     ctx.fillRect(2, 10, 16, 14);
     ctx.fillStyle = '#7a5227';
     ctx.fillRect(8, 15, 4, 6);
+    tex.refresh();
+  }
+
+  /**
+   * Mancha escura de bordas difusas, para o texto do menu descolar do castelo.
+   * Um retângulo chapado marcaria a emenda; o degradê radial some nas pontas.
+   */
+  private makeSombraMenu() {
+    const W = 256;
+    const H = 256;
+    const { tex, ctx } = this.ctxOf('sombra-menu', W, H);
+    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W / 2);
+    g.addColorStop(0, 'rgba(4,6,15,0.92)');
+    g.addColorStop(0.55, 'rgba(4,6,15,0.72)');
+    g.addColorStop(0.82, 'rgba(4,6,15,0.28)');
+    g.addColorStop(1, 'rgba(4,6,15,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
     tex.refresh();
   }
 

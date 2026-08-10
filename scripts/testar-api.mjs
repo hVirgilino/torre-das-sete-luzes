@@ -18,6 +18,10 @@ const { carregar, limpar } = compilarApi();
 process.on('exit', limpar);
 
 
+// zera o rate limit antes de começar: a suíte abre dezenas de corridas e o
+// teto de 30/hora por IP a barraria a partir da segunda execução seguida
+await sql`delete from rate_limit`;
+
 const rotas = {
   start: await carregar('_rotas/run-start'),
   question: await carregar('_rotas/run-question'),
@@ -279,6 +283,41 @@ const subDbg = await chamar(rotas.submit, { corpo: { runId: dbg.corpo.runId, tok
 checar(subDbg.status === 201, 'a corrida do atalho entra no ranking');
 if (subDbg.status === 201) await sql`delete from ranking where id = ${subDbg.corpo.entradaId}`;
 await sql`delete from run where id = ${dbg.corpo.runId}`;
+
+secao('Posição anunciada bate com a listagem');
+
+// três corridas com tempos diferentes: o número que o submit devolve tem que
+// ser o mesmo que a tela pública mostra
+// limpa sobras de execuções anteriores — senão o teste depende do estado do banco
+await sql`delete from run where nome in ('Medio','Rapido','Lento')`;
+const publicadas = [];
+for (const [nome, alvoMs] of [['Medio', 0], ['Rapido', 0], ['Lento', 0]]) {
+  const c = await chamar(rotas.start, { corpo: { nome, dificuldade: 'demolay' } });
+  const cookie = (await chamar(rotas.login, { corpo: { senha: 'Virgilino391' }, ip: '198.51.100.90' }))
+    .cabecalhos['set-cookie'].split(';')[0];
+  await chamar(rotas.debug, { corpo: { runId: c.corpo.runId, token: c.corpo.token }, cookie });
+  await chamar(rotas.finish, { corpo: { runId: c.corpo.runId, token: c.corpo.token } });
+  const r = await chamar(rotas.submit, { corpo: { runId: c.corpo.runId, token: c.corpo.token } });
+  publicadas.push({ nome, id: r.corpo.entradaId, posicaoAnunciada: r.corpo.posicao });
+  // tempos distintos e fora de ordem de publicação
+  await sql`update ranking set duracao_ms = ${{ Medio: 5000, Rapido: 1000, Lento: 9000 }[nome]} where id = ${r.corpo.entradaId}`;
+}
+
+// o primeiro publicado, sozinho no ranking, tinha de ser anunciado como 1º
+checar(
+  publicadas[0].posicaoAnunciada === 1,
+  `primeiro a publicar é anunciado como 1º (foi ${publicadas[0].posicaoAnunciada}º)`
+);
+
+const listaDemolay = (await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'demolay' } }))
+  .corpo.ranking.demolay;
+checar(
+  listaDemolay[0]?.nome === 'Rapido' && listaDemolay[2]?.nome === 'Lento',
+  `listagem ordena por tempo (${listaDemolay.map((e) => e.nome).join(' < ')})`
+);
+
+for (const e of publicadas) await sql`delete from ranking where id = ${e.id}`;
+await sql`delete from run where nome in ('Medio','Rapido','Lento')`;
 
 secao('Painel de moderação');
 

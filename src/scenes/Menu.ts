@@ -25,6 +25,9 @@ export class MenuScene extends Phaser.Scene {
   private discSpin?: Phaser.Tweens.Tween;
   private trackLabel?: Phaser.GameObjects.Text;
   private trackToast?: Phaser.GameObjects.Text;
+  private botoes: Phaser.GameObjects.Text[] = [];
+  /** true enquanto uma ação assíncrona do menu está no ar */
+  private ocupado = false;
 
   constructor() {
     super('Menu');
@@ -35,6 +38,8 @@ export class MenuScene extends Phaser.Scene {
     // a cena é reaproveitada a cada volta ao menu: sem isto a lista acumula
     // referências aos objetos já destruídos das visitas anteriores
     this.menuItems = [];
+    this.botoes = [];
+    this.ocupado = false;
     this.cameras.main.setBackgroundColor(0x060a1c);
     this.bg = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'bg-castle');
     this.cameras.main.fadeIn(500, 4, 6, 18);
@@ -79,6 +84,12 @@ export class MenuScene extends Phaser.Scene {
 
     this.buildTrophies();
 
+    // a mancha vem antes dos botões para ficar por baixo deles
+    const sombra = this.add
+      .image(GAME_WIDTH / 2, 364, 'sombra-menu')
+      .setDisplaySize(430, 260);
+    this.menuItems.push(sombra);
+
     const novo = makeButton(this, GAME_WIDTH / 2, 276, 'Novo Jogo', () => this.startNewGame(), 24);
     const cont = makeButton(this, GAME_WIDTH / 2, 320, 'Continuar', () => this.continueGame(), 24);
     const rank = makeButton(this, GAME_WIDTH / 2, 364, 'Partida Ranqueada', () => this.iniciarRanqueada(), 24);
@@ -87,8 +98,16 @@ export class MenuScene extends Phaser.Scene {
     if (!State.hasSave) {
       cont.setAlpha(0.35).disableInteractive();
     }
+    this.botoes = [novo, cont, rank, tab, opts];
     this.menuItems.push(novo, cont, rank, tab, opts);
 
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 36, `v${__VERSAO__}`, {
+        fontFamily: FONTS.body,
+        fontSize: '12px',
+        color: '#3a4472'
+      })
+      .setOrigin(0.5);
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 18, 'toque ou clique para liberar o som', {
         fontFamily: FONTS.body,
@@ -304,6 +323,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private async startNewGame() {
+    if (this.ocupado) return;
     if (this.optionsPanel) this.toggleOptions();
     // partida casual nunca herda uma corrida ranqueada pendente
     Ranqueado.encerrar();
@@ -321,7 +341,24 @@ export class MenuScene extends Phaser.Scene {
    * servidor e começa a correr no instante em que a corrida abre, então
    * qualquer cutscene no meio seria tempo perdido no placar.
    */
+  /**
+   * Tranca os botões durante uma ação demorada.
+   *
+   * Abrir corrida ranqueada é ida e volta de rede: sem isto dava para clicar em
+   * Novo Jogo por cima e cair na cutscene com uma corrida já aberta no servidor.
+   */
+  private travarMenu(travado: boolean) {
+    this.ocupado = travado;
+    for (const b of this.botoes) {
+      if (travado) b.disableInteractive().setAlpha(0.4);
+      else b.setInteractive({ useHandCursor: true }).setAlpha(1);
+    }
+    // "Continuar" volta a ficar apagado se não houver save
+    if (!travado && !State.hasSave) this.botoes[1]?.setAlpha(0.35).disableInteractive();
+  }
+
   private async iniciarRanqueada() {
+    if (this.ocupado) return;
     if (this.optionsPanel) this.toggleOptions();
     const dif = State.settings.difficulty;
     if (!ehRanqueavel(dif)) {
@@ -340,6 +377,7 @@ export class MenuScene extends Phaser.Scene {
     });
     if (nome === null) return;
 
+    this.travarMenu(true);
     try {
       await Ranqueado.iniciar(nome.trim() || 'Galahad', dif);
       await fadeOut(this, 400);
@@ -347,6 +385,7 @@ export class MenuScene extends Phaser.Scene {
     } catch (erro) {
       const msg = erro instanceof ErroApi ? erro.message : 'falha ao abrir a corrida';
       this.mostrarAviso(`Não foi possível iniciar a partida ranqueada.\n${msg}`);
+      this.travarMenu(false);
     }
   }
 
@@ -362,12 +401,14 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private async abrirRanking() {
+    if (this.ocupado) return;
     if (this.optionsPanel) this.toggleOptions();
     await fadeOut(this, 350);
     this.scene.start('Ranking');
   }
 
   private continueGame() {
+    if (this.ocupado) return;
     Ranqueado.encerrar();
     State.loadSave();
     if (!State.hasSave) return;
@@ -375,6 +416,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private toggleOptions() {
+    if (this.ocupado) return;
     if (this.optionsPanel) {
       this.optionsPanel.destroy();
       this.optionsPanel = undefined;
