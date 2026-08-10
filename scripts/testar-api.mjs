@@ -19,18 +19,18 @@ process.on('exit', limpar);
 
 
 const rotas = {
-  start: await carregar('run/start'),
-  question: await carregar('run/question'),
-  answer: await carregar('run/answer'),
-  ability: await carregar('run/ability'),
-  light: await carregar('run/light'),
-  finish: await carregar('run/finish'),
-  ranking: await carregar('ranking/index'),
-  submit: await carregar('ranking/submit'),
-  me: await carregar('ranking/me'),
-  login: await carregar('admin/login'),
-  entries: await carregar('admin/entries'),
-  moderate: await carregar('admin/moderate')
+  start: await carregar('_rotas/run-start'),
+  question: await carregar('_rotas/run-question'),
+  answer: await carregar('_rotas/run-answer'),
+  ability: await carregar('_rotas/run-ability'),
+  light: await carregar('_rotas/run-light'),
+  finish: await carregar('_rotas/run-finish'),
+  ranking: await carregar('_rotas/ranking-lista'),
+  submit: await carregar('_rotas/ranking-submit'),
+  me: await carregar('_rotas/ranking-me'),
+  login: await carregar('_rotas/admin-login'),
+  entries: await carregar('_rotas/admin-entries'),
+  moderate: await carregar('_rotas/admin-moderate')
 };
 
 // ------------------------------------------------------------ req/res falsos

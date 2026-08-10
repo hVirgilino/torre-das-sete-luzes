@@ -20,14 +20,14 @@ const { carregar, limpar } = compilarApi();
 process.on('exit', limpar);
 
 const ROTAS = {
-  'run/start': await carregar('run/start'),
-  'run/question': await carregar('run/question'),
-  'run/answer': await carregar('run/answer'),
-  'ranking': await carregar('ranking/index'),
-  'ranking/submit': await carregar('ranking/submit'),
-  'ranking/me': await carregar('ranking/me'),
-  'admin/login': await carregar('admin/login'),
-  'admin/entries': await carregar('admin/entries')
+  'run/start': await carregar('_rotas/run-start'),
+  'run/question': await carregar('_rotas/run-question'),
+  'run/answer': await carregar('_rotas/run-answer'),
+  'ranking': await carregar('_rotas/ranking-lista'),
+  'ranking/submit': await carregar('_rotas/ranking-submit'),
+  'ranking/me': await carregar('_rotas/ranking-me'),
+  'admin/login': await carregar('_rotas/admin-login'),
+  'admin/entries': await carregar('_rotas/admin-entries')
 };
 
 /** Limite de corpo da Vercel para função Node; aqui só para imitar a borda. */
