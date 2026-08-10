@@ -1,9 +1,9 @@
-import { despachar } from '../_lib/despachar';
-import start from '../_rotas/run-start';
-import question from '../_rotas/run-question';
-import answer from '../_rotas/run-answer';
-import ability from '../_rotas/run-ability';
-import light from '../_rotas/run-light';
-import finish from '../_rotas/run-finish';
+import { despachar } from '../_lib/despachar.js';
+import start from '../_rotas/run-start.js';
+import question from '../_rotas/run-question.js';
+import answer from '../_rotas/run-answer.js';
+import ability from '../_rotas/run-ability.js';
+import light from '../_rotas/run-light.js';
+import finish from '../_rotas/run-finish.js';
 
 export default despachar({ start, question, answer, ability, light, finish });

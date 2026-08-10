@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { corpoJson, exigirMetodo, json, rota } from '../_lib/http';
-import { tokenValido } from '../_lib/cripto';
-import { uuid } from '../_lib/validar';
+import { sql } from '../_lib/db.js';
+import { corpoJson, exigirMetodo, json, rota } from '../_lib/http.js';
+import { tokenValido } from '../_lib/cripto.js';
+import { uuid } from '../_lib/validar.js';
 
 interface Linha {
   id: string;

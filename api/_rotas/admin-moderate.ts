@@ -1,15 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http';
-import { hashIp } from '../_lib/cripto';
-import { exigirAdmin } from '../_lib/sessao';
+import { sql } from '../_lib/db.js';
+import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http.js';
+import { hashIp } from '../_lib/cripto.js';
+import { exigirAdmin } from '../_lib/sessao.js';
 import {
   ErroEntrada,
   LIMITE_MOTIVO,
   LIMITE_NOME,
   textoOpcional,
   uuid
-} from '../_lib/validar';
+} from '../_lib/validar.js';
 
 const ACOES = ['ocultar', 'restaurar', 'censurar'] as const;
 type Acao = (typeof ACOES)[number];

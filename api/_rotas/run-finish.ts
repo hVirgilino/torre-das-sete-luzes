@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http';
-import { carregarCorrida, dificuldadeDa, todasAcesas, type Corrida } from '../_lib/corrida';
-import { LOCKS_PER_FLOOR } from '../../src/data/difficulty';
+import { sql } from '../_lib/db.js';
+import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http.js';
+import { carregarCorrida, dificuldadeDa, todasAcesas, type Corrida } from '../_lib/corrida.js';
+import { LOCKS_PER_FLOOR } from '../../src/data/difficulty.js';
 
 /** Mínimo de respostas certas para vencer, se nunca se errar: 2+3+4+5+6+7+8. */
 const ACERTOS_MINIMOS = LOCKS_PER_FLOOR.reduce((s, n) => s + n, 0);

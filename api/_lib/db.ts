@@ -1,5 +1,5 @@
 import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
-import { ErroHttp } from './http';
+import { ErroHttp } from './http.js';
 
 /**
  * Cliente Neon sobre HTTP. Cada consulta é um fetch, então não existe pool de

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { exigirMetodo, json, rota } from '../_lib/http';
-import { exigirAdmin } from '../_lib/sessao';
+import { sql } from '../_lib/db.js';
+import { exigirMetodo, json, rota } from '../_lib/http.js';
+import { exigirAdmin } from '../_lib/sessao.js';
 
 interface Linha {
   id: string;

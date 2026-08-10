@@ -1,14 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http';
-import { inteiro, uuid } from '../_lib/validar';
+import { sql } from '../_lib/db.js';
+import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http.js';
+import { inteiro, uuid } from '../_lib/validar.js';
 import {
   carregarCorrida,
   estadoPublico,
   removerTranca,
   reporTrancas,
   type Vela
-} from '../_lib/corrida';
+} from '../_lib/corrida.js';
 
 interface LinhaPergunta {
   id: string;

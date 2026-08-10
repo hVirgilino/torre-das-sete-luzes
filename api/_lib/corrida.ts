@@ -1,14 +1,14 @@
-import { sql } from './db';
-import { ErroHttp } from './http';
-import { tokenValido } from './cripto';
-import { uuid, inteiro } from './validar';
+import { sql } from './db.js';
+import { ErroHttp } from './http.js';
+import { tokenValido } from './cripto.js';
+import { uuid, inteiro } from './validar.js';
 import {
   LOCKS_PER_FLOOR,
   LOCKS_RETURNED_ON_ABILITY,
   dificuldadePorId,
   type Difficulty
-} from '../../src/data/difficulty';
-import type { QuestionHistory } from '../../src/systems/questions';
+} from '../../src/data/difficulty.js';
+import type { QuestionHistory } from '../../src/systems/questions.js';
 
 export interface Vela {
   locks: number;

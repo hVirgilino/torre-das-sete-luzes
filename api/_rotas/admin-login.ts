@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http';
-import { criarSessao, hashIp, senhaConfere } from '../_lib/cripto';
-import { limitar } from '../_lib/limite';
-import { COOKIE_SESSAO } from '../_lib/sessao';
+import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http.js';
+import { criarSessao, hashIp, senhaConfere } from '../_lib/cripto.js';
+import { limitar } from '../_lib/limite.js';
+import { COOKIE_SESSAO } from '../_lib/sessao.js';
 
 /**
  * Login do painel de moderação.

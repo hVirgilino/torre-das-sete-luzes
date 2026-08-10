@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ErroEntrada } from './validar';
+import { ErroEntrada } from './validar.js';
 
 /** Erro com código HTTP próprio — mensagem segura para mostrar ao jogador. */
 export class ErroHttp extends Error {

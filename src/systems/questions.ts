@@ -1,7 +1,7 @@
-import { CEREMONY, CeremonySection } from '../data/ceremony';
+import { CEREMONY, CeremonySection } from '../data/ceremony.js';
 // de ./difficulty, não de ./config: este módulo roda também nas functions,
 // onde importar config (que lê `window`) seria pedir para quebrar
-import { Difficulty } from '../data/difficulty';
+import { Difficulty } from '../data/difficulty.js';
 
 export interface Question {
   /** título da seção de origem (ex.: "Fidelidade") */

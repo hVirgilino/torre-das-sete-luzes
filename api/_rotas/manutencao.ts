@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http';
-import { hashIp, senhaConfere } from '../_lib/cripto';
-import { limitar } from '../_lib/limite';
+import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http.js';
+import { hashIp, senhaConfere } from '../_lib/cripto.js';
+import { limitar } from '../_lib/limite.js';
 
 /**
  * Libera a tela de manutenção mediante senha.

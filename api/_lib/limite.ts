@@ -1,5 +1,5 @@
-import { sql } from './db';
-import { ErroHttp } from './http';
+import { sql } from './db.js';
+import { ErroHttp } from './http.js';
 
 /**
  * Rate limit por janela fixa, guardado no próprio Postgres.

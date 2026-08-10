@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http';
-import { assinarToken, hashIp } from '../_lib/cripto';
-import { limitar } from '../_lib/limite';
-import { dificuldadeRanqueavel, textoOpcional, LIMITE_CAPITULO } from '../_lib/validar';
-import { carregarCorrida, type Corrida } from '../_lib/corrida';
+import { sql } from '../_lib/db.js';
+import { corpoJson, ErroHttp, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http.js';
+import { assinarToken, hashIp } from '../_lib/cripto.js';
+import { limitar } from '../_lib/limite.js';
+import { dificuldadeRanqueavel, textoOpcional, LIMITE_CAPITULO } from '../_lib/validar.js';
+import { carregarCorrida, type Corrida } from '../_lib/corrida.js';
 
 /**
  * Publica uma corrida concluída no ranking.

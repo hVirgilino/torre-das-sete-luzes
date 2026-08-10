@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http';
+import { sql } from '../_lib/db.js';
+import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http.js';
 import {
   acenderVela,
   carregarCorrida,
   estadoPublico,
   velaValida,
   type Vela
-} from '../_lib/corrida';
+} from '../_lib/corrida.js';
 
 /** Acende uma vela cujas trancas já caíram — o servidor confere que caíram. */
 export default rota(async (req: VercelRequest, res: VercelResponse) => {

@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { corpoJson, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http';
-import { assinarToken, hashIp } from '../_lib/cripto';
-import { limitar } from '../_lib/limite';
-import { dificuldadeRanqueavel, textoObrigatorio, LIMITE_NOME } from '../_lib/validar';
-import { estadoPublico, velasIniciais, type Corrida } from '../_lib/corrida';
+import { sql } from '../_lib/db.js';
+import { corpoJson, exigirMetodo, ipDoPedido, json, rota } from '../_lib/http.js';
+import { assinarToken, hashIp } from '../_lib/cripto.js';
+import { limitar } from '../_lib/limite.js';
+import { dificuldadeRanqueavel, textoObrigatorio, LIMITE_NOME } from '../_lib/validar.js';
+import { estadoPublico, velasIniciais, type Corrida } from '../_lib/corrida.js';
 
 /**
  * Abre uma partida ranqueada.

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '../_lib/db';
-import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http';
+import { sql } from '../_lib/db.js';
+import { corpoJson, ErroHttp, exigirMetodo, json, rota } from '../_lib/http.js';
 import {
   apagarPorHabilidade,
   carregarCorrida,
@@ -8,7 +8,7 @@ import {
   removerTranca,
   velaValida,
   type Vela
-} from '../_lib/corrida';
+} from '../_lib/corrida.js';
 
 interface LinhaPergunta {
   id: string;
