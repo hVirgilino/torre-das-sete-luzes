@@ -6,6 +6,9 @@ import { Dialog, fadeIn, fadeOut, wait, makeStarRow } from '../systems/ui';
 import { makeButton } from '../systems/ui';
 import { placeCourt, swordSwings } from './cutscene';
 import { initSceneView } from '../systems/display';
+import { Ranqueado } from '../systems/ranqueado';
+import { ErroApi } from '../systems/api';
+import { pedirTexto } from '../systems/modal';
 
 export class FinalScene extends Phaser.Scene {
   constructor() {
@@ -34,7 +37,20 @@ export class FinalScene extends Phaser.Scene {
     const nome = State.save?.playerName ?? 'Cavaleiro';
     // o cronômetro já parou na Torre; aqui só se lê o total e se registra
     const dificuldade = State.difficulty;
-    const tempoMs = State.save?.elapsedMs ?? 0;
+    let tempoMs = State.save?.elapsedMs ?? 0;
+    let ranqueada = false;
+    if (Ranqueado.ativo) {
+      try {
+        // o tempo do ranking é o do servidor, não o cronômetro local
+        const fim = await Ranqueado.concluir();
+        tempoMs = fim.duracaoMs;
+        ranqueada = true;
+      } catch {
+        // corrida não fechou (rede caiu, ou já estava encerrada): vale como
+        // vitória casual, com o tempo local, e não vai para o ranking
+        Ranqueado.encerrar();
+      }
+    }
     const conquista = State.recordClear(dificuldade.id, tempoMs);
 
     await wait(this, 900);
@@ -80,7 +96,7 @@ export class FinalScene extends Phaser.Scene {
       State.persistSave();
     }
 
-    await this.showEndPanel(nome, dificuldade, tempoMs, conquista);
+    await this.showEndPanel(nome, dificuldade, tempoMs, conquista, ranqueada);
   }
 
   /** Cartela de fim de jogo: grau, estrelas, palavra do Rei e tempo do desafio. */
@@ -88,7 +104,8 @@ export class FinalScene extends Phaser.Scene {
     nome: string,
     dificuldade: Difficulty,
     tempoMs: number,
-    conquista: { before: number; after: number; previousBest?: number; isRecord: boolean }
+    conquista: { before: number; after: number; previousBest?: number; isRecord: boolean },
+    ranqueada: boolean
   ) {
     const D = 1200;
     const cx = GAME_WIDTH / 2;
@@ -181,9 +198,41 @@ export class FinalScene extends Phaser.Scene {
       this.tweens.add({ targets: star, scale: { from: 0, to: 1.1 }, duration: 420, ease: 'back.out' });
     }
 
+    if (ranqueada) this.oferecerRanking(cx, D, dificuldade.nome);
+
     makeButton(this, cx, GAME_HEIGHT - 48, 'Voltar ao Menu', async () => {
       await fadeOut(this, 500);
       this.scene.start('Menu');
     }).setDepth(D);
+  }
+
+  /**
+   * Convite para publicar no ranking global, logo abaixo do recorde pessoal.
+   * O nome já é o da corrida — aqui só se pergunta o capítulo, que é opcional.
+   */
+  private oferecerRanking(cx: number, D: number, modo: string) {
+    const botao = makeButton(this, cx, GAME_HEIGHT - 96, '⚑ Submeter ao ranking global', async () => {
+      const capitulo = await pedirTexto({
+        titulo: 'Submeter ao ranking',
+        dica: 'Capítulo ou ID DeMolay',
+        ajuda: 'Opcional — aparece ao lado do vosso nome na classificação pública. ' +
+          'Podeis deixar em branco.',
+        confirmar: 'Publicar',
+        maxLength: 48,
+        opcional: true
+      });
+      if (capitulo === null) return;
+
+      botao.disableInteractive().setAlpha(0.5).setText('Enviando...');
+      try {
+        const r = await Ranqueado.submeter(capitulo.trim() || null);
+        Ranqueado.encerrar();
+        botao.setText(`✔ ${r.posicao}º lugar no modo ${modo}`).setColor('#8fbf6f');
+      } catch (erro) {
+        const msg = erro instanceof ErroApi ? erro.message : 'falha no envio';
+        botao.setText(`✕ ${msg}`).setColor('#ff8a8a');
+        botao.setInteractive({ useHandCursor: true }).setAlpha(1);
+      }
+    }, 18).setDepth(D);
   }
 }

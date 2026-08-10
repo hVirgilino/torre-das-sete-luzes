@@ -4,6 +4,8 @@ import { State } from '../systems/state';
 import { Audio } from '../systems/audio';
 import { generateQuestion, Question } from '../systems/questions';
 import { initSceneView, uiPx } from '../systems/display';
+import { Api, ErroApi } from '../systems/api';
+import { Ranqueado } from '../systems/ranqueado';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 
@@ -38,6 +40,12 @@ export class QuizScene extends Phaser.Scene {
   private abilityIcons: Phaser.GameObjects.Container[] = [];
   private buffIcons!: Phaser.GameObjects.Text;
   private lastTick = -1;
+  /** partida ranqueada: pergunta, resposta e habilidade passam pelo servidor */
+  private ranqueado = false;
+  /** id da pergunta em aberto no servidor (só no ranqueado) */
+  private questionId = '';
+  /** evita disparar duas chamadas enquanto uma está no ar */
+  private aguardando = false;
 
   constructor() {
     super('Quiz');
@@ -47,6 +55,10 @@ export class QuizScene extends Phaser.Scene {
     initSceneView(this);
     this.vela = data.vela;
     this.practice = !!data.practice;
+    // o treino de Merlin nunca é ranqueado: não conta trancas nem tempo
+    this.ranqueado = Ranqueado.ativo && !this.practice;
+    this.questionId = '';
+    this.aguardando = false;
     this.options = [];
     this.abilityIcons = [];
     this.locked = false;
@@ -223,10 +235,60 @@ export class QuizScene extends Phaser.Scene {
     );
   }
 
+  /**
+   * Habilidade no modo ranqueado: quem aplica o efeito e paga o custo é o
+   * servidor. O cliente só desenha o que voltou — se ficasse do lado de cá,
+   * bastaria declarar "usei Luz Plena" para ganhar a questão sem gastar vela.
+   */
+  private async usarHabilidadeNoServidor(vela: number) {
+    if (this.aguardando) return;
+    this.aguardando = true;
+    Audio.ability();
+    try {
+      const s = Ranqueado.exigir();
+      const e = await Api.habilidade(s.runId, s.token, vela);
+      if (!this.scene.isActive()) return;
+      Ranqueado.espelhar(e);
+
+      if (typeof e.eliminar === 'number' && this.options[e.eliminar]) {
+        this.disableOption(this.options[e.eliminar]);
+      }
+      if (e.dica) {
+        this.currentHint = e.dica;
+        this.hintText.setText(e.dica);
+      }
+      if (typeof e.encurtar === 'number' && this.options[e.encurtar]) {
+        const alvo = this.options[e.encurtar];
+        const ws = alvo.text.text.split(' ');
+        if (ws.length > 2) alvo.text.setText(ws.slice(0, -1).join(' ') + ' ✂');
+      }
+      if (e.congelada) {
+        this.frozen = true;
+        this.timerBar.setTint(0x27408b);
+      }
+      if (e.semReset) this.noReset = true;
+
+      if (e.resolveuCerto) {
+        if (typeof e.indiceCorreta === 'number') {
+          this.question.indiceCorreta = e.indiceCorreta;
+          this.options[e.indiceCorreta]?.bg.setTint(0xffc24d);
+        }
+        this.resolveCorrect(vela === 6);
+      } else {
+        this.refreshAbilityBar();
+      }
+    } catch (erro) {
+      if (this.scene.isActive()) this.falharRede(erro);
+    } finally {
+      this.aguardando = false;
+    }
+  }
+
   private useAbility(vela: number) {
     if (this.practice || this.locked) return;
     const c = State.candle(vela);
     if (!c.lit) return;
+    if (this.ranqueado) return void this.usarHabilidadeNoServidor(vela);
     const ab = abilityByVela(vela);
     Audio.ability();
 
@@ -299,7 +361,7 @@ export class QuizScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------- questões
-  private newQuestion() {
+  private async newQuestion() {
     this.locked = false;
     this.frozen = false;
     this.noReset = false;
@@ -307,11 +369,46 @@ export class QuizScene extends Phaser.Scene {
     this.hintText.setText('');
     this.feedback.setText('');
     const d = State.difficulty;
+
+    if (this.ranqueado) {
+      // no ranqueado a pergunta vem pronta do servidor, sem a resposta certa
+      this.locked = true;
+      this.feedback.setColor('#5b3a1e').setText('Consultando Merlin...');
+      try {
+        const s = Ranqueado.exigir();
+        const p = await Api.pergunta(s.runId, s.token, this.vela);
+        if (!this.scene.isActive()) return;
+        Ranqueado.espelhar(p);
+        this.questionId = p.questionId;
+        this.question = {
+          origem: p.origem, antes: p.antes, depois: p.depois,
+          correta: '', opcoes: p.opcoes, indiceCorreta: -1
+        };
+        this.remaining = p.restanteMs / 1000;
+        this.frozen = p.congelada;
+        this.noReset = p.semReset;
+        this.feedback.setText('');
+        this.locked = false;
+        this.pintarQuestao(p.eliminadas);
+        return;
+      } catch (erro) {
+        if (this.scene.isActive()) this.falharRede(erro);
+        return;
+      }
+    }
+
     this.question = generateQuestion(this.vela, d);
     this.remaining = d.tempo;
     this.lastTick = -1;
     this.timerBar.setTint(0xa53434);
 
+    this.pintarQuestao([]);
+  }
+
+  /** desenha a questão atual; `eliminadas` já vêm marcadas ao retomar do servidor */
+  private pintarQuestao(eliminadas: number[]) {
+    this.lastTick = -1;
+    this.timerBar.setTint(this.frozen ? 0x27408b : 0xa53434);
     this.origemText.setText(`— ${this.question.origem} —`);
     this.updateLocksText();
 
@@ -332,7 +429,19 @@ export class QuizScene extends Phaser.Scene {
       o.text.setColor(OPT_INK);
       if (visible) o.text.setText(`${LETTERS[i]} · ${opt}`);
     });
+    for (const i of eliminadas) if (this.options[i]) this.disableOption(this.options[i]);
     this.refreshAbilityBar();
+  }
+
+  /**
+   * Corrida ranqueada exige servidor. Sem ele não dá para continuar sem
+   * inventar estado — então explica e devolve o jogador à Torre.
+   */
+  private falharRede(erro: unknown) {
+    const msg = erro instanceof ErroApi ? erro.message : 'falha de comunicação';
+    this.locked = true;
+    this.feedback.setColor('#7a1f1f').setText(`Corrida ranqueada interrompida:\n${msg}`);
+    this.time.delayedCall(2600, () => this.close());
   }
 
   private updateLocksText() {
@@ -355,12 +464,16 @@ export class QuizScene extends Phaser.Scene {
       Audio.tick();
     }
     if (this.remaining <= 0) {
-      this.resolveWrong('O tempo se esgotou!');
+      if (this.ranqueado) this.responderNoServidor(-1);
+      else this.resolveWrong('O tempo se esgotou!');
     }
   }
 
-  private answer(btn: OptionButton) {
+  private async answer(btn: OptionButton) {
     if (this.locked || btn.disabled || !btn.container.visible) return;
+
+    if (this.ranqueado) return this.responderNoServidor(btn.index, btn);
+
     if (btn.index === this.question.indiceCorreta) {
       btn.bg.setTint(0x8fbf6f);
       this.resolveCorrect(false);
@@ -371,10 +484,43 @@ export class QuizScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Envia a escolha e deixa o servidor julgar. `escolha = -1` é o cliente
+   * avisando que o tempo acabou na tela dele — o servidor confere pelo prazo
+   * que ele mesmo gravou, então adiantar ou atrasar esse aviso não ajuda.
+   */
+  private async responderNoServidor(escolha: number, btn?: OptionButton) {
+    if (this.aguardando) return;
+    this.aguardando = true;
+    this.locked = true;
+    try {
+      const s = Ranqueado.exigir();
+      const r = await Api.responder(s.runId, s.token, this.questionId, escolha);
+      if (!this.scene.isActive()) return;
+      Ranqueado.espelhar(r);
+      this.question.indiceCorreta = r.indiceCorreta;
+      if (r.acertou) {
+        btn?.bg.setTint(0x8fbf6f);
+        this.resolveCorrect(false);
+      } else {
+        if (btn) {
+          btn.bg.setTint(0xa53434);
+          btn.text.setColor(OPT_INK_ERRADA);
+        }
+        this.resolveWrong(r.expirou ? 'O tempo se esgotou!' : 'Resposta incorreta!');
+      }
+    } catch (erro) {
+      if (this.scene.isActive()) this.falharRede(erro);
+    } finally {
+      this.aguardando = false;
+    }
+  }
+
   private resolveCorrect(byAbility: boolean) {
     this.locked = true;
     Audio.correct();
-    if (!this.practice) {
+    // no ranqueado o servidor já debitou a tranca e o estado veio espelhado
+    if (!this.practice && !this.ranqueado) {
       State.removeLock(this.vela);
     }
     this.updateLocksText();
@@ -413,7 +559,7 @@ export class QuizScene extends Phaser.Scene {
     if (this.noReset) {
       this.feedback.setColor('#27408b').setText(`${reason}\nO Elo dos Irmãos impediu o retorno das trancas.`);
     } else {
-      State.resetLocks(this.vela);
+      if (!this.ranqueado) State.resetLocks(this.vela);
       this.updateLocksText();
       this.feedback.setColor('#7a1f1f').setText(`${reason}\nTodas as trancas desta vela retornaram...`);
     }

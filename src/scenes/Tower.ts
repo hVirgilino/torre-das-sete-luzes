@@ -4,6 +4,7 @@ import { State } from '../systems/state';
 import { Audio } from '../systems/audio';
 import { fadeIn, fadeOut } from '../systems/ui';
 import { renderScale, uiPx } from '../systems/display';
+import { Ranqueado } from '../systems/ranqueado';
 
 const FLOOR_H = 160;
 const FLOORS = 8;
@@ -425,6 +426,9 @@ export class TowerScene extends Phaser.Scene {
       .setDepth(901)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', async () => {
+        // abandonar a Torre encerra a corrida ranqueada: ela é de sessão única
+        // e o relógio do servidor não para porque se voltou ao menu
+        Ranqueado.encerrar();
         State.persistSave();
         Audio.ambientStop();
         await fadeOut(this, 400);
@@ -541,7 +545,20 @@ export class TowerScene extends Phaser.Scene {
       this.openQuiz(this.nearStation.vela, false);
     } else if (!c.lit) {
       const st = this.nearStation;
-      State.lightCandle(st.vela);
+      if (Ranqueado.ativo) {
+        // quem acende é o servidor: ele confere que as trancas caíram mesmo
+        this.busy = true;
+        Ranqueado.acender(st.vela)
+          .then(() => {
+            this.refreshStations();
+            this.refreshHUD();
+            this.refreshGate();
+          })
+          .catch(() => this.avisar('Sem conexão — a vela não pôde ser acesa.'))
+          .finally(() => { this.busy = false; });
+      } else {
+        State.lightCandle(st.vela);
+      }
       Audio.candleLight();
       this.cameras.main.flash(200, 255, 194, 77);
       const burst = this.add.particles(st.x, st.y - 48, 'spark', {
@@ -558,6 +575,19 @@ export class TowerScene extends Phaser.Scene {
       this.refreshHUD();
       this.refreshGate();
     }
+  }
+
+  /** mensagem passageira no HUD, para erro de rede não passar despercebido */
+  private avisar(texto: string) {
+    const t = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 250, texto, {
+        fontFamily: FONTS.body, fontSize: uiPx(16), color: '#ff8a8a',
+        backgroundColor: 'rgba(6,10,28,0.9)', padding: { x: 12, y: 6 }
+      })
+      .setOrigin(0.5)
+      .setDepth(960);
+    this.hudLayer.add(t);
+    this.tweens.add({ targets: t, alpha: 0, delay: 2200, duration: 700, onComplete: () => t.destroy() });
   }
 
   private openQuiz(vela: number, practice: boolean) {

@@ -9,7 +9,9 @@ import { Audio } from '../systems/audio';
 import {
   makeButton, makeSlider, makeStarRow, aplicarEstiloEstrela, estiloPorPosicao, fadeOut
 } from '../systems/ui';
-import { Api, entradasPublicadas } from '../systems/api';
+import { Api, ErroApi, entradasPublicadas } from '../systems/api';
+import { Ranqueado } from '../systems/ranqueado';
+import { pedirTexto } from '../systems/modal';
 import {
   RESOLUTIONS, initSceneView, isAutoResolution, renderScale, resolutionOf, uiScale
 } from '../systems/display';
@@ -76,14 +78,15 @@ export class MenuScene extends Phaser.Scene {
 
     this.buildTrophies();
 
-    const novo = makeButton(this, GAME_WIDTH / 2, 280, 'Novo Jogo', () => this.startNewGame());
-    const cont = makeButton(this, GAME_WIDTH / 2, 335, 'Continuar', () => this.continueGame());
-    const rank = makeButton(this, GAME_WIDTH / 2, 390, 'Ranking', () => this.abrirRanking());
-    const opts = makeButton(this, GAME_WIDTH / 2, 442, 'Opções', () => this.toggleOptions());
+    const novo = makeButton(this, GAME_WIDTH / 2, 276, 'Novo Jogo', () => this.startNewGame(), 24);
+    const cont = makeButton(this, GAME_WIDTH / 2, 320, 'Continuar', () => this.continueGame(), 24);
+    const rank = makeButton(this, GAME_WIDTH / 2, 364, 'Partida Ranqueada', () => this.iniciarRanqueada(), 24);
+    const tab = makeButton(this, GAME_WIDTH / 2, 408, 'Ranking', () => this.abrirRanking(), 24);
+    const opts = makeButton(this, GAME_WIDTH / 2, 452, 'Opções', () => this.toggleOptions(), 24);
     if (!State.hasSave) {
       cont.setAlpha(0.35).disableInteractive();
     }
-    this.menuItems.push(novo, cont, rank, opts);
+    this.menuItems.push(novo, cont, rank, tab, opts);
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 18, 'toque ou clique para liberar o som', {
@@ -290,6 +293,8 @@ export class MenuScene extends Phaser.Scene {
 
   private async startNewGame() {
     if (this.optionsPanel) this.toggleOptions();
+    // partida casual nunca herda uma corrida ranqueada pendente
+    Ranqueado.encerrar();
     this.menuItems.forEach((m) => (m as any).setVisible?.(false));
     // câmera dá zoom no castelo com fade out
     this.cameras.main.zoomTo(3.2 * renderScale(), 1600, 'Sine.easeIn');
@@ -299,6 +304,44 @@ export class MenuScene extends Phaser.Scene {
     this.scene.start('Intro');
   }
 
+  /**
+   * Partida ranqueada: pula intro e tutorial de propósito. O relógio é do
+   * servidor e começa a correr no instante em que a corrida abre, então
+   * qualquer cutscene no meio seria tempo perdido no placar.
+   */
+  private async iniciarRanqueada() {
+    if (this.optionsPanel) this.toggleOptions();
+    const dif = State.settings.difficulty;
+    const nome = await pedirTexto({
+      titulo: 'Partida ranqueada',
+      dica: 'Nome do cavaleiro',
+      ajuda: `Modo ${dificuldadePorId(dif)?.nome}. O tempo começa agora e corre até o Rei — ` +
+        'sem pausa, numa sessão só. Trocar a dificuldade fica nas Opções.',
+      confirmar: 'Começar'
+    });
+    if (nome === null) return;
+
+    try {
+      await Ranqueado.iniciar(nome.trim() || 'Galahad', dif);
+      await fadeOut(this, 400);
+      this.scene.start('Tower');
+    } catch (erro) {
+      const msg = erro instanceof ErroApi ? erro.message : 'falha ao abrir a corrida';
+      this.mostrarAviso(`Não foi possível iniciar a partida ranqueada.\n${msg}`);
+    }
+  }
+
+  private mostrarAviso(texto: string) {
+    const aviso = this.add
+      .text(GAME_WIDTH / 2, 500, texto, {
+        fontFamily: FONTS.body, fontSize: '15px', color: '#ff8a8a', align: 'center',
+        backgroundColor: 'rgba(6,10,28,0.9)', padding: { x: 10, y: 6 }
+      })
+      .setOrigin(0.5)
+      .setDepth(1500);
+    this.tweens.add({ targets: aviso, alpha: 0, delay: 3200, duration: 800, onComplete: () => aviso.destroy() });
+  }
+
   private async abrirRanking() {
     if (this.optionsPanel) this.toggleOptions();
     await fadeOut(this, 350);
@@ -306,6 +349,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private continueGame() {
+    Ranqueado.encerrar();
     State.loadSave();
     if (!State.hasSave) return;
     fadeOut(this, 500).then(() => this.scene.start('Tower'));
