@@ -48,6 +48,8 @@ export class QuizScene extends Phaser.Scene {
     this.locked = false;
     this.frozen = false;
     this.noReset = false;
+    // o tempo gasto nas trancas também conta para o desafio de Merlin
+    State.timerResume();
 
     // fundo escurecido + pergaminho
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'px').setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setTint(0x04060f).setAlpha(0.82);
@@ -148,6 +150,12 @@ export class QuizScene extends Phaser.Scene {
     this.timerEvent = this.time.addEvent({ delay: 100, loop: true, callback: () => this.tickTimer() });
 
     this.newQuestion();
+  }
+
+  update() {
+    // a Torre fica pausada enquanto o pergaminho está aberto, então o
+    // cronômetro do desafio precisa continuar sendo alimentado aqui
+    State.timerTick();
   }
 
   // ------------------------------------------------------------- habilidades

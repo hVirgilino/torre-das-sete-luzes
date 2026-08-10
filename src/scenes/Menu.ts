@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
-import { DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
+import { DESIGN_DX, DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
+import { MOON_X } from './Boot';
 import { nextTrack, trackById, TRACKS } from '../data/tracks';
-import { State } from '../systems/state';
+import { State, formatClock } from '../systems/state';
 import { Audio } from '../systems/audio';
-import { makeButton, makeSlider, fadeOut } from '../systems/ui';
-import { RESOLUTIONS, initSceneView, renderScale, resolutionOf, uiScale } from '../systems/display';
+import { makeButton, makeSlider, makeStarRow, fadeOut } from '../systems/ui';
+import {
+  RESOLUTIONS, initSceneView, isAutoResolution, renderScale, resolutionOf, uiScale
+} from '../systems/display';
 import { UI_SCALES } from '../data/config';
 
 export class MenuScene extends Phaser.Scene {
@@ -21,6 +24,9 @@ export class MenuScene extends Phaser.Scene {
 
   create() {
     initSceneView(this);
+    // a cena é reaproveitada a cada volta ao menu: sem isto a lista acumula
+    // referências aos objetos já destruídos das visitas anteriores
+    this.menuItems = [];
     this.cameras.main.setBackgroundColor(0x060a1c);
     this.bg = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'bg-castle');
     this.cameras.main.fadeIn(500, 4, 6, 18);
@@ -63,6 +69,8 @@ export class MenuScene extends Phaser.Scene {
     this.tweens.add({ targets: [title2], scale: { from: 1, to: 1.02 }, yoyo: true, repeat: -1, duration: 1600, ease: 'sine.inout' });
     this.menuItems.push(title1, title2);
 
+    this.buildTrophies();
+
     const novo = makeButton(this, GAME_WIDTH / 2, 280, 'Novo Jogo', () => this.startNewGame());
     const cont = makeButton(this, GAME_WIDTH / 2, 335, 'Continuar', () => this.continueGame());
     const opts = makeButton(this, GAME_WIDTH / 2, 390, 'Opções', () => this.toggleOptions());
@@ -93,6 +101,53 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
+  // ------------------------------------------------------------- troféus
+  /**
+   * Estrelas conquistadas sob o título e, no canto, o melhor tempo de cada
+   * dificuldade já vencida — a vitrine de quem faz speedrun.
+   */
+  private buildTrophies() {
+    const { container, stars } = makeStarRow(this, GAME_WIDTH / 2, 222, State.stars, 0.8);
+    this.menuItems.push(container);
+    // as acesas respiram devagar; os lugares vazios ficam quietos e opacos
+    stars.forEach((s, i) => {
+      if (i < State.stars) {
+        this.tweens.add({
+          targets: s, scale: { from: 0.8, to: 0.88 },
+          duration: 1500, yoyo: true, repeat: -1, ease: 'sine.inout', delay: i * 260
+        });
+      } else {
+        s.setAlpha(0.5);
+      }
+    });
+
+    const vencidas = DIFFICULTIES.filter((d) => State.trophies.records[d.id] !== undefined);
+    if (!vencidas.length) return;
+
+    const kids: Phaser.GameObjects.GameObject[] = [
+      this.add
+        .text(0, 0, 'RECORDES', {
+          fontFamily: FONTS.display, fontSize: '13px', color: '#d9a441'
+        })
+        .setOrigin(0, 0)
+    ];
+    vencidas.forEach((d, i) => {
+      kids.push(
+        this.add
+          .text(0, 22 + i * 19, `${d.nome}`, {
+            fontFamily: FONTS.body, fontSize: '14px', color: '#aeb8e8'
+          })
+          .setOrigin(0, 0),
+        this.add
+          .text(132, 22 + i * 19, formatClock(State.trophies.records[d.id]!), {
+            fontFamily: FONTS.body, fontSize: '14px', color: '#f3e6c4'
+          })
+          .setOrigin(1, 0)
+      );
+    });
+    this.menuItems.push(this.add.container(24, 26, kids));
+  }
+
   // ---------------------------------------------------------- atmosfera
   private buildAtmosphere() {
     // tochas tremulando sobre janelas/ameias do castelo
@@ -118,7 +173,7 @@ export class MenuScene extends Phaser.Scene {
 
     // respiração lenta do luar
     const moonGlow = this.add
-      .image(780, 90, 'glow')
+      .image(MOON_X, 90, 'glow')
       .setBlendMode(Phaser.BlendModes.ADD)
       .setTint(0xc9d2f5)
       .setScale(1.6)
@@ -126,7 +181,7 @@ export class MenuScene extends Phaser.Scene {
     this.tweens.add({ targets: moonGlow, alpha: 0.4, duration: 3400, yoyo: true, repeat: -1, ease: 'sine.inout' });
 
     // fumaça discreta subindo do portão
-    this.add.particles(465, 456, 'spark', {
+    this.add.particles(465 + DESIGN_DX, 456, 'spark', {
       speed: { min: 6, max: 16 },
       angle: { min: 260, max: 280 },
       lifespan: 2200,
@@ -324,9 +379,11 @@ export class MenuScene extends Phaser.Scene {
     yr += 34;
     kids.push(rowLabel(colR, yr, 'Resolução'));
     const resIdx = () => RESOLUTIONS.findIndex((r) => r.id === State.settings.resolutionId);
+    // no celular a resolução vem da tela do aparelho — o seletor não se aplica
+    const auto = isAutoResolution();
     const resName = this.add
-      .text(colR + 60, yr, resolutionOf(State.settings.resolutionId).label, {
-        fontFamily: FONTS.body, fontSize: '16px', color: '#ffc24d'
+      .text(colR + 60, yr, auto ? 'Automática' : resolutionOf(State.settings.resolutionId).label, {
+        fontFamily: FONTS.body, fontSize: '16px', color: auto ? '#aeb8e8' : '#ffc24d'
       })
       .setOrigin(0.5);
     kids.push(resName);
@@ -346,10 +403,12 @@ export class MenuScene extends Phaser.Scene {
       resName.setText(RESOLUTIONS[i].label);
       applyBtn.setVisible(true);
     };
-    kids.push(
-      arrowBtn(colR - 20, yr, -1, () => cycleRes(-1)),
-      arrowBtn(colR + 140, yr, 1, () => cycleRes(1))
-    );
+    if (!auto) {
+      kids.push(
+        arrowBtn(colR - 20, yr, -1, () => cycleRes(-1)),
+        arrowBtn(colR + 140, yr, 1, () => cycleRes(1))
+      );
+    }
 
     yr += 74;
     kids.push(rowLabel(colR, yr, 'Tam. interface'));

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH, ResolutionId } from '../data/config';
+import { GAME_HEIGHT, GAME_WIDTH, ResolutionId, isTouchDevice, screenSize } from '../data/config';
 import { State } from './state';
 
 /**
@@ -19,9 +19,32 @@ export function resolutionOf(id: ResolutionId) {
   return RESOLUTIONS.find((r) => r.id === id) ?? RESOLUTIONS[0];
 }
 
+/**
+ * No celular a resolução de render é deduzida da tela, não da configuração:
+ * num display de DPR 3 como o do S24 o canvas de 960px era esticado para
+ * ~2340px físicos e o jogo subia borrado. Aqui o backing store nasce com a
+ * mesma contagem de pixels que o aparelho realmente mostra.
+ *
+ * Calculado uma vez só — precisa bater com o tamanho de canvas criado em
+ * main.ts e com o zoom que cada cena aplica na câmera.
+ */
+const autoScale = (() => {
+  if (!isTouchDevice()) return null;
+  const dpr = window.devicePixelRatio || 1;
+  const { w, h } = screenSize();
+  const k = (Math.max(w, h) * dpr) / GAME_WIDTH;
+  // teto de 3: acima disso é só custo de GPU sem ganho visível
+  return Math.min(Math.max(k, 1), 3);
+})();
+
 /** Fator de escala do canvas para a resolução escolhida nas configurações. */
 export function renderScale(): number {
-  return resolutionOf(State.settings.resolutionId).k;
+  return autoScale ?? resolutionOf(State.settings.resolutionId).k;
+}
+
+/** true quando a resolução vem da tela e o seletor das opções não vale. */
+export function isAutoResolution(): boolean {
+  return autoScale !== null;
 }
 
 /**

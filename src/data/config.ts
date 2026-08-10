@@ -1,7 +1,59 @@
 /** Configuração central de game design. Ajuste aqui, o jogo inteiro obedece. */
 
-export const GAME_WIDTH = 960;
+/** Altura lógica — fixa. Todo o design vertical (andares, HUD) depende dela. */
 export const GAME_HEIGHT = 540;
+
+/** Largura do design original; nenhuma tela recebe menos mundo que isto. */
+const DESIGN_WIDTH = 960;
+/** Teto para telas ultralargas, senão o cenário se espalha demais. */
+const MAX_WIDTH = 1280;
+
+export const isTouchDevice = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true;
+
+/**
+ * Largura lógica do mundo, deduzida da proporção real da tela.
+ *
+ * Um celular alto como o S24 é 19,5:9 — com a largura fixa em 960 (16:9) o
+ * jogo aparecia encaixado no meio com tarjas pretas grossas dos dois lados.
+ * Esticando a largura lógica até a proporção do aparelho, o cenário ocupa a
+ * tela inteira sem deformar nada: o mundo é mais largo, não esticado.
+ *
+ * Telas mais "quadradas" que 16:9 continuam em 960 com letterbox, como antes.
+ */
+/**
+ * Medidas da tela em CSS px. No celular vale `screen`, não `innerWidth`: a
+ * barra de endereço do Android come dezenas de pixels da altura e voltaria
+ * uma proporção diferente a cada carregamento da página.
+ */
+export function screenSize(): { w: number; h: number } {
+  if (!isTouchDevice() || !window.screen?.width || !window.screen?.height) {
+    return { w: window.innerWidth, h: window.innerHeight };
+  }
+  return { w: window.screen.width, h: window.screen.height };
+}
+
+function logicalWidth(): number {
+  if (typeof window === 'undefined') return DESIGN_WIDTH;
+  const { w, h } = screenSize();
+  if (!w || !h) return DESIGN_WIDTH;
+  // no celular o jogo é sempre jogado deitado, então vale a proporção em
+  // paisagem mesmo se a página abrir em pé (aí o overlay pede para girar)
+  const aspect = isTouchDevice() ? Math.max(w, h) / Math.min(w, h) : w / h;
+  const wanted = GAME_HEIGHT * aspect;
+  const clamped = Math.min(Math.max(wanted, DESIGN_WIDTH), MAX_WIDTH);
+  return Math.round(clamped / 2) * 2; // par, para não gerar meio pixel
+}
+
+export const GAME_WIDTH = logicalWidth();
+
+/**
+ * Deslocamento para centralizar composições desenhadas no design de 960.
+ * Os fundos são pintados em canvas: o que precisa alcançar as bordas (céu,
+ * chão, montanhas) usa GAME_WIDTH; o que é uma cena fechada (o castelo, o
+ * trono) continua em coordenadas de 960 e só anda para o meio por aqui.
+ */
+export const DESIGN_DX = (GAME_WIDTH - DESIGN_WIDTH) / 2;
 
 /** Faixas da vitrola (definidas em data/tracks.ts) */
 export type TrackId = 'festiva' | 'epica' | 'taverna';
@@ -26,7 +78,14 @@ export interface Difficulty {
   lacuna: 'palavra' | 'palavras' | 'frase';
   /** quais partes do texto entram no banco de questões */
   banco: Array<'vela' | 'abertura' | 'encerramento'>;
+  /** estrelas que concluir esta dificuldade garante (Escudeiro não dá nenhuma) */
+  estrelas: number;
+  /** o que o Rei diz na tela de fim de jogo neste modo */
+  mensagemFinal: string;
 }
+
+/** Total de estrelas possíveis — a vitrine do menu tem sempre este tamanho. */
+export const MAX_ESTRELAS = 3;
 
 export const DIFFICULTIES: Difficulty[] = [
   {
@@ -36,7 +95,11 @@ export const DIFFICULTIES: Difficulty[] = [
     tempo: 20,
     opcoes: 2,
     lacuna: 'palavra',
-    banco: ['vela']
+    banco: ['vela'],
+    estrelas: 0,
+    mensagemFinal:
+      'Parabéns, Sir! As sete luzes arderam sob vossa guarda. Mas o Escudeiro ainda ' +
+      'não conhece o peso da armadura — que tal enfrentar a Torre no modo Iniciático?'
   },
   {
     id: 'iniciatico',
@@ -45,7 +108,11 @@ export const DIFFICULTIES: Difficulty[] = [
     tempo: 15,
     opcoes: 3,
     lacuna: 'palavras',
-    banco: ['vela', 'abertura']
+    banco: ['vela', 'abertura'],
+    estrelas: 1,
+    mensagemFinal:
+      'Vossa primeira estrela, Sir. O Iniciático já não tropeça nas palavras da ' +
+      'Cerimônia — mas o grau de DeMolay exige recitá-la de cor. Ousais?'
   },
   {
     id: 'demolay',
@@ -54,7 +121,11 @@ export const DIFFICULTIES: Difficulty[] = [
     tempo: 10,
     opcoes: 4,
     lacuna: 'frase',
-    banco: ['vela', 'abertura', 'encerramento']
+    banco: ['vela', 'abertura', 'encerramento'],
+    estrelas: 2,
+    mensagemFinal:
+      'Duas estrelas, Sir. Recitastes a Cerimônia inteira sem hesitar — poucos ' +
+      'chegam aqui. Resta a prova do Cavaleiro: as mesmas palavras, metade do tempo.'
   },
   {
     id: 'cavaleiro',
@@ -63,7 +134,12 @@ export const DIFFICULTIES: Difficulty[] = [
     tempo: 5,
     opcoes: 4,
     lacuna: 'frase',
-    banco: ['vela', 'abertura', 'encerramento']
+    banco: ['vela', 'abertura', 'encerramento'],
+    estrelas: 3,
+    mensagemFinal:
+      'Sois digno deste grau, Sir. Vencestes a Torre na maior dificuldade, com o ' +
+      'tempo correndo contra vós a cada palavra. As três estrelas são vossas — ' +
+      'nada mais há nesta Torre que possa vos ensinar.'
   }
 ];
 

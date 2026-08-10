@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../data/config';
+import { GAME_WIDTH, GAME_HEIGHT, DESIGN_DX } from '../data/config';
+
+/** a lua fica ancorada na borda direita, não numa coluna fixa de 960 */
+export const MOON_X = GAME_WIDTH - 180;
 
 /**
  * Gera 100% da arte proceduralmente (pixel art via canvas).
@@ -17,6 +20,7 @@ export class BootScene extends Phaser.Scene {
     this.makeTowerTiles();
     this.makeCandle();
     this.makeLock();
+    this.makeStars();
     this.makeKnight();
     this.makeCharacters();
     this.makeGlow();
@@ -67,40 +71,43 @@ export class BootScene extends Phaser.Scene {
       }
     }
 
-    // lua com halo suave + crateras
-    const moonHalo = ctx.createRadialGradient(780, 90, 4, 780, 90, 70);
+    // lua com halo suave + crateras — fica sempre à mesma distância da borda
+    const MX = MOON_X;
+    const moonHalo = ctx.createRadialGradient(MX, 90, 4, MX, 90, 70);
     moonHalo.addColorStop(0, 'rgba(232,236,255,0.35)');
     moonHalo.addColorStop(1, 'rgba(232,236,255,0)');
     ctx.fillStyle = moonHalo;
-    ctx.fillRect(710, 20, 140, 140);
+    ctx.fillRect(MX - 70, 20, 140, 140);
     ctx.fillStyle = '#e8ecff';
     ctx.beginPath();
-    ctx.arc(780, 90, 34, 0, Math.PI * 2);
+    ctx.arc(MX, 90, 34, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#c9d2f5';
     ctx.beginPath();
-    ctx.arc(770, 82, 8, 0, Math.PI * 2);
-    ctx.arc(792, 100, 5, 0, Math.PI * 2);
-    ctx.arc(768, 100, 3.5, 0, Math.PI * 2);
+    ctx.arc(MX - 10, 82, 8, 0, Math.PI * 2);
+    ctx.arc(MX + 12, 100, 5, 0, Math.PI * 2);
+    ctx.arc(MX - 12, 100, 3.5, 0, Math.PI * 2);
     ctx.fill();
     // nuvens finas translúcidas cruzando a lua
     ctx.fillStyle = 'rgba(20,24,50,0.35)';
     ctx.beginPath();
-    ctx.ellipse(740, 100, 60, 8, -0.1, 0, Math.PI * 2);
-    ctx.ellipse(820, 70, 40, 6, 0.15, 0, Math.PI * 2);
+    ctx.ellipse(MX - 40, 100, 60, 8, -0.1, 0, Math.PI * 2);
+    ctx.ellipse(MX + 40, 70, 40, 6, 0.15, 0, Math.PI * 2);
     ctx.fill();
 
-    // montanhas distantes — plano extra de profundidade atrás das colinas
+    // montanhas distantes — plano extra de profundidade atrás das colinas.
+    // O relevo acompanha a largura real para não sobrar céu na borda.
+    const mx = (f: number) => f * GAME_WIDTH;
     ctx.fillStyle = '#0d1230';
     ctx.beginPath();
     ctx.moveTo(0, 430);
-    ctx.lineTo(120, 360);
-    ctx.lineTo(260, 420);
-    ctx.lineTo(430, 340);
-    ctx.lineTo(600, 410);
-    ctx.lineTo(760, 350);
-    ctx.lineTo(960, 420);
-    ctx.lineTo(960, 470);
+    ctx.lineTo(mx(0.125), 360);
+    ctx.lineTo(mx(0.271), 420);
+    ctx.lineTo(mx(0.448), 340);
+    ctx.lineTo(mx(0.625), 410);
+    ctx.lineTo(mx(0.792), 350);
+    ctx.lineTo(GAME_WIDTH, 420);
+    ctx.lineTo(GAME_WIDTH, 470);
     ctx.lineTo(0, 470);
     ctx.fill();
 
@@ -108,11 +115,15 @@ export class BootScene extends Phaser.Scene {
     ctx.fillStyle = '#101632';
     ctx.beginPath();
     ctx.moveTo(0, 470);
-    ctx.quadraticCurveTo(240, 400, 480, 460);
-    ctx.quadraticCurveTo(720, 510, 960, 450);
-    ctx.lineTo(960, 540);
+    ctx.quadraticCurveTo(mx(0.25), 400, mx(0.5), 460);
+    ctx.quadraticCurveTo(mx(0.75), 510, GAME_WIDTH, 450);
+    ctx.lineTo(GAME_WIDTH, 540);
     ctx.lineTo(0, 540);
     ctx.fill();
+
+    // o castelo é uma cena fechada: continua no design de 960, centralizado
+    ctx.save();
+    ctx.translate(DESIGN_DX, 0);
 
     // castelo (silhueta com face iluminada pela lua à direita, sombra à esquerda)
     const castle = (x: number, w: number, h: number, roof = true) => {
@@ -206,6 +217,7 @@ export class BootScene extends Phaser.Scene {
       ctx.fillStyle = '#fff0b8';
       ctx.fillRect(lx, ly, 1, 1);
     }
+    ctx.restore();
 
     tex.refresh();
   }
@@ -230,8 +242,8 @@ export class BootScene extends Phaser.Scene {
         ctx.stroke();
       }
     }
-    // janelas em arco com noite
-    for (const wx of [120, 760]) {
+    // janelas em arco com noite — presas às bordas laterais
+    for (const wx of [120, GAME_WIDTH - 200]) {
       ctx.fillStyle = '#0b1026';
       ctx.fillRect(wx, 80, 80, 150);
       ctx.beginPath();
@@ -242,8 +254,8 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(wx + 55, 120, 2, 2);
       ctx.fillRect(wx + 18, 140, 2, 2);
     }
-    // estandartes
-    for (const bx of [280, 620]) {
+    // estandartes — simétricos em torno do trono
+    for (const bx of [GAME_WIDTH / 2 - 200, GAME_WIDTH / 2 + 140]) {
       ctx.fillStyle = '#7a1f1f';
       ctx.fillRect(bx, 60, 60, 130);
       ctx.beginPath();
@@ -269,6 +281,9 @@ export class BootScene extends Phaser.Scene {
       ctx.lineTo(x - 30, 540);
       ctx.stroke();
     }
+    // tapete e trono continuam no design de 960, centralizados
+    ctx.save();
+    ctx.translate(DESIGN_DX, 0);
     // tapete vermelho
     ctx.fillStyle = '#7a1f1f';
     ctx.beginPath();
@@ -300,6 +315,7 @@ export class BootScene extends Phaser.Scene {
     ctx.fillRect(452, 276, 8, 18);
     ctx.fillRect(476, 268, 8, 26);
     ctx.fillRect(500, 276, 8, 18);
+    ctx.restore();
     tex.refresh();
   }
 
@@ -578,6 +594,56 @@ export class BootScene extends Phaser.Scene {
     ctx.fillStyle = '#7a5227';
     ctx.fillRect(8, 15, 4, 6);
     tex.refresh();
+  }
+
+  // ------------------------------------------------------------- estrelas
+  /**
+   * Estrela de conquista em dois estados: `star-on` (dourada, com um brilho
+   * fosco no meio) e `star-off` (só o contorno, o lugar vago da vitrine).
+   */
+  private makeStars() {
+    const S = 40;
+    const path = (ctx: CanvasRenderingContext2D) => {
+      const cx = S / 2;
+      const cy = S / 2 + 1;
+      const outer = S / 2 - 3;
+      const inner = outer * 0.45;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 === 0 ? outer : inner;
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    };
+
+    {
+      const { tex, ctx } = this.ctxOf('star-on', S, S);
+      const grad = ctx.createLinearGradient(0, 0, 0, S);
+      grad.addColorStop(0, '#fff0b8');
+      grad.addColorStop(0.55, '#ffc24d');
+      grad.addColorStop(1, '#d9a441');
+      path(ctx);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.strokeStyle = '#7a5227';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      tex.refresh();
+    }
+    {
+      const { tex, ctx } = this.ctxOf('star-off', S, S);
+      path(ctx);
+      ctx.fillStyle = 'rgba(10,13,32,0.55)';
+      ctx.fill();
+      ctx.strokeStyle = '#3a4472';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      tex.refresh();
+    }
   }
 
   // ---------------------------------------------------------------- cavaleiro

@@ -11,6 +11,8 @@ import { resetQuestionHistory } from './questions';
 
 const SAVE_KEY = 'cerimonia-da-luz:save:v1';
 const SETTINGS_KEY = 'cerimonia-da-luz:settings:v1';
+/** troféus ficam fora do save: recomeçar o jogo não apaga estrela conquistada */
+const TROPHIES_KEY = 'cerimonia-da-luz:trophies:v1';
 
 export interface CandleState {
   /** trancas restantes neste andar */
@@ -28,6 +30,8 @@ export interface SaveData {
   /** buff da vela 5 pendente */
   protectionActive: boolean;
   finished: boolean;
+  /** cronômetro do desafio de Merlin, em ms — só corre com o jogo em foco */
+  elapsedMs: number;
   updatedAt: number;
 }
 
@@ -51,6 +55,30 @@ const defaultSettings: Settings = {
   resolutionId: '540',
   uiScale: 1
 };
+
+/** Dificuldades já vencidas alguma vez. As estrelas e os recordes saem daqui. */
+export interface Trophies {
+  cleared: DifficultyId[];
+  /** melhor tempo em ms por dificuldade — o PR de quem faz speedrun */
+  records: Partial<Record<DifficultyId, number>>;
+}
+
+/** "12 minutos e 34 segundos" — texto por extenso, como o Rei falaria. */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const min = Math.floor(total / 60);
+  const sec = total % 60;
+  const m = `${min} ${min === 1 ? 'minuto' : 'minutos'}`;
+  const s = `${sec} ${sec === 1 ? 'segundo' : 'segundos'}`;
+  if (min === 0) return s;
+  return sec === 0 ? m : `${m} e ${s}`;
+}
+
+/** "12:34" — versão curta para a lista de recordes do menu. */
+export function formatClock(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 
 const TRACK_IDS: TrackId[] = ['festiva', 'epica', 'taverna'];
 const RESOLUTION_IDS: ResolutionId[] = ['540', '720', '1080', '1440'];
@@ -108,6 +136,8 @@ function sanitizeSave(raw: unknown): SaveData | null {
     floor,
     protectionActive: r.protectionActive === true,
     finished: r.finished === true,
+    elapsedMs:
+      typeof r.elapsedMs === 'number' && Number.isFinite(r.elapsedMs) ? Math.max(0, r.elapsedMs) : 0,
     updatedAt: typeof r.updatedAt === 'number' && Number.isFinite(r.updatedAt) ? r.updatedAt : Date.now()
   };
 }
@@ -115,10 +145,106 @@ function sanitizeSave(raw: unknown): SaveData | null {
 class GameStateManager {
   save: SaveData | null = null;
   settings: Settings = { ...defaultSettings };
+  trophies: Trophies = { cleared: [], records: {} };
+  /** último instante contabilizado pelo cronômetro; null = parado */
+  private lastTick: number | null = null;
 
   constructor() {
     this.loadSettings();
     this.loadSave();
+    this.loadTrophies();
+  }
+
+  // ---------- troféus ----------
+  loadTrophies() {
+    try {
+      const raw = localStorage.getItem(TROPHIES_KEY);
+      const parsed = (raw ? JSON.parse(raw) : null) as
+        | { cleared?: unknown; records?: unknown }
+        | null;
+      const list = parsed?.cleared;
+      const recs = (parsed?.records ?? {}) as Record<string, unknown>;
+      const records: Partial<Record<DifficultyId, number>> = {};
+      for (const d of DIFFICULTIES) {
+        const v = recs[d.id];
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) records[d.id] = v;
+      }
+      this.trophies = {
+        cleared: Array.isArray(list) ? list.filter(isDifficultyId) : [],
+        records
+      };
+    } catch {
+      this.trophies = { cleared: [], records: {} };
+    }
+  }
+
+  persistTrophies() {
+    try {
+      localStorage.setItem(TROPHIES_KEY, JSON.stringify(this.trophies));
+    } catch {
+      /* noop */
+    }
+  }
+
+  /**
+   * Estrelas conquistadas: a maior recompensa entre as dificuldades vencidas.
+   * Vencer no DeMolay vale 2 mesmo sem ter passado pelo Iniciático — como no
+   * Five Nights at Freddy's, o modo mais duro já entrega os anteriores.
+   */
+  get stars(): number {
+    return this.trophies.cleared.reduce((max, id) => {
+      const d = DIFFICULTIES.find((x) => x.id === id);
+      return d ? Math.max(max, d.estrelas) : max;
+    }, 0);
+  }
+
+  /**
+   * Registra a conclusão de uma dificuldade e o tempo gasto. Devolve quantas
+   * estrelas havia antes e depois (para a tela final animar só as novas) e se
+   * o tempo bateu o recorde anterior daquela dificuldade.
+   */
+  recordClear(
+    id: DifficultyId,
+    timeMs: number
+  ): { before: number; after: number; previousBest?: number; isRecord: boolean } {
+    const before = this.stars;
+    const previousBest = this.trophies.records[id];
+    const isRecord = timeMs > 0 && (previousBest === undefined || timeMs < previousBest);
+
+    if (!this.trophies.cleared.includes(id)) this.trophies.cleared.push(id);
+    if (isRecord) this.trophies.records[id] = timeMs;
+    this.persistTrophies();
+
+    return { before, after: this.stars, previousBest, isRecord };
+  }
+
+  // ---------- cronômetro do desafio ----------
+  /**
+   * Retoma a contagem. Chamado ao entrar na Torre e no Quiz — o tempo corre
+   * durante o desafio inteiro e só para na cutscene final com o Rei.
+   */
+  timerResume() {
+    if (this.save && !this.save.finished) this.lastTick = Date.now();
+  }
+
+  /** Acumula o intervalo desde o último tick. Chamar uma vez por frame. */
+  timerTick() {
+    if (!this.save || this.lastTick === null) return;
+    const now = Date.now();
+    const dt = now - this.lastTick;
+    this.lastTick = now;
+    // salto grande = aba em segundo plano ou aparelho bloqueado; não conta,
+    // senão bastava deixar o jogo aberto para arruinar o próprio tempo
+    if (dt > 0 && dt < 2000) this.save.elapsedMs += dt;
+  }
+
+  /** Para a contagem e devolve o tempo total do desafio, em ms. */
+  timerStop(): number {
+    this.timerTick();
+    this.lastTick = null;
+    const total = this.save?.elapsedMs ?? 0;
+    this.persistSave();
+    return total;
   }
 
   // ---------- settings ----------
@@ -165,8 +291,10 @@ class GameStateManager {
       floor: 1,
       protectionActive: false,
       finished: false,
+      elapsedMs: 0,
       updatedAt: Date.now()
     };
+    this.lastTick = null;
     resetQuestionHistory();
     this.persistSave();
   }

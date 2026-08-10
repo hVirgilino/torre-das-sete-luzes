@@ -56,7 +56,9 @@ export class TutorialScene extends Phaser.Scene {
       },
       {
         t: 'Prove-se',
-        b: 'Antes de subir, Merlin propõe uma questão de treino. Ela não tem consequências.\n\nBoa sorte, ' +
+        b: 'Antes de subir, Merlin propõe uma questão de treino. Ela não tem consequências.\n\n' +
+          'A partir daqui o tempo corre: ao chegar ao Rei sabereis quanto durou vossa jornada, ' +
+          'e o melhor tempo de cada dificuldade fica gravado.\n\nBoa sorte, ' +
           `Sir ${State.save?.playerName ?? ''}. Que as sete luzes iluminem seu caminho.`
       }
     ];

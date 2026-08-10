@@ -12,6 +12,14 @@ const GROUND_Y = WORLD_H - 60; // topo do chão térreo
 const isTouch = () => window.matchMedia('(pointer: coarse)').matches;
 
 // ------------------------------------------------------------ movimentação
+/** vão da escada: 70px de largura, encostado na parede esquerda ou direita */
+const GAP_W = 70;
+const GAP_MARGIN = 70;
+/** x do vão da escada do andar n (alterna esquerda/direita) */
+const gapX = (gapLeft: boolean) => (gapLeft ? GAP_MARGIN : GAME_WIDTH - GAP_MARGIN - GAP_W);
+/** posições do design original em 960, reescaladas para a largura real */
+const spanX = (x960: number) => Math.round((x960 * GAME_WIDTH) / 960);
+
 const RUN_SPEED = 230;
 /** o cavaleiro ganha impulso no ar: o salto cobre um vão bem mais largo */
 const AIR_SPEED = 300;
@@ -123,7 +131,7 @@ export class TowerScene extends Phaser.Scene {
     // tochas ambiente com halo tremeluzente e brasas subindo
     for (let n = 0; n <= 7; n++) {
       const y = this.floorY(n) - 90;
-      for (const x of [200, 760]) {
+      for (const x of [200, GAME_WIDTH - 200]) {
         const torch = this.add.sprite(x, y, 'torch-flame-0').setScale(1.6);
         torch.play({ key: 'torch-flame', delay: (n * 137) % 400 });
         const halo = this.add
@@ -188,8 +196,8 @@ export class TowerScene extends Phaser.Scene {
     for (let n = 1; n <= FLOORS; n++) {
       const y = this.floorY(n);
       const gapLeft = n % 2 === 1;
-      const g1 = gapLeft ? 70 : 810;
-      const g2 = g1 + 70;
+      const g1 = gapX(gapLeft);
+      const g2 = g1 + GAP_W;
       addPlatform(0, g1, y);
       addPlatform(g2, GAME_WIDTH, y);
 
@@ -217,14 +225,14 @@ export class TowerScene extends Phaser.Scene {
     }
 
     // estações das velas — andares 1 a 7, posições variadas
-    const stationX = [480, 620, 340, 480, 660, 300, 480];
+    const stationX = [480, 620, 340, 480, 660, 300, 480].map(spanX);
     for (let vela = 1; vela <= 7; vela++) {
       this.buildStation(vela, stationX[vela - 1], this.floorY(vela));
     }
 
     // portão do 8º andar (bloqueia o vão de subida)
     const gateGapLeft = FLOORS % 2 === 1;
-    const gx = (gateGapLeft ? 70 : 810) + 40;
+    const gx = gapX(gateGapLeft) + 40;
     const gy = this.floorY(8) + 70;
     this.gate = this.add.image(gx, gy + 60, 'gate').setAlpha(0.95);
     this.tweens.add({ targets: this.gate, alpha: 0.65, yoyo: true, repeat: -1, duration: 900 });
@@ -240,11 +248,11 @@ export class TowerScene extends Phaser.Scene {
     );
 
     // o Rei no 8º andar
-    this.king = this.add.sprite(480, this.floorY(8), 'king').setScale(2.4).setOrigin(0.5, 1);
+    this.king = this.add.sprite(GAME_WIDTH / 2, this.floorY(8), 'king').setScale(2.4).setOrigin(0.5, 1);
     this.worldLayer.add(this.king);
     this.worldLayer.add(
       this.add
-        .text(480, this.floorY(8) - 96, 'O Rei', { fontFamily: FONTS.display, fontSize: uiPx(15), color: '#d9a441' })
+        .text(GAME_WIDTH / 2, this.floorY(8) - 96, 'O Rei', { fontFamily: FONTS.display, fontSize: uiPx(15), color: '#d9a441' })
         .setOrigin(0.5)
     );
 
@@ -287,9 +295,12 @@ export class TowerScene extends Phaser.Scene {
     fadeIn(this, 500);
     this.hudCam.fadeIn(500, 4, 6, 18);
     Audio.ambientStart();
+    // o cronômetro do desafio começa a correr aqui — logo depois do tutorial
+    State.timerResume();
 
     this.events.off('resume');
     this.events.on('resume', () => {
+      State.timerResume();
       this.refreshStations();
       this.refreshHUD();
       this.refreshGate();
@@ -518,7 +529,8 @@ export class TowerScene extends Phaser.Scene {
     if (this.busy) return;
     if (this.nearKing && State.allLit) {
       this.busy = true;
-      State.persistSave();
+      // fim do desafio: o cronômetro para antes da cutscene com o Rei
+      State.timerStop();
       Audio.ambientStop();
       fadeOut(this, 600).then(() => this.scene.start('Final'));
       return;
@@ -574,6 +586,7 @@ export class TowerScene extends Phaser.Scene {
 
   update() {
     if (!this.player?.body) return;
+    State.timerTick();
     this.pollTouch();
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 

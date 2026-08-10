@@ -1,7 +1,34 @@
 import Phaser from 'phaser';
-import { FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
+import { FONTS, GAME_HEIGHT, GAME_WIDTH, MAX_ESTRELAS } from '../data/config';
 import { Audio } from './audio';
 import { uiPx } from './display';
+
+/**
+ * Vitrine de estrelas de conquista: sempre MAX_ESTRELAS lugares, os primeiros
+ * `earned` acesos. Os lugares vazios ficam à vista de propósito — é o que
+ * mostra ao jogador que ainda há dificuldade por vencer.
+ *
+ * O container guarda as imagens na ordem, para quem chamou poder animar
+ * individualmente as estrelas recém-conquistadas.
+ */
+export function makeStarRow(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  earned: number,
+  scale = 1
+): { container: Phaser.GameObjects.Container; stars: Phaser.GameObjects.Image[] } {
+  const gap = 46 * scale;
+  const stars: Phaser.GameObjects.Image[] = [];
+  for (let i = 0; i < MAX_ESTRELAS; i++) {
+    const on = i < earned;
+    const img = scene.add
+      .image((i - (MAX_ESTRELAS - 1) / 2) * gap, 0, on ? 'star-on' : 'star-off')
+      .setScale(scale);
+    stars.push(img);
+  }
+  return { container: scene.add.container(x, y, stars), stars };
+}
 
 /** Botão de texto medieval com hover/tap */
 export function makeButton(
