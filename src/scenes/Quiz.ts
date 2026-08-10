@@ -4,6 +4,7 @@ import { State } from '../systems/state';
 import { Audio } from '../systems/audio';
 import { generateQuestion, Question } from '../systems/questions';
 import { initSceneView, uiPx } from '../systems/display';
+import { makeButton } from '../systems/ui';
 import { Api, ErroApi } from '../systems/api';
 import { Ranqueado } from '../systems/ranqueado';
 
@@ -46,6 +47,13 @@ export class QuizScene extends Phaser.Scene {
   private questionId = '';
   /** evita disparar duas chamadas enquanto uma está no ar */
   private aguardando = false;
+  /** largura útil da barra de tempo, em px do mundo lógico */
+  private larguraBarra = 800;
+  /** duração cheia da questão atual — a barra é fração disto, não de d.tempo */
+  private duracaoQuestao = 10;
+  private carregando!: Phaser.GameObjects.Container;
+  private pena!: Phaser.GameObjects.Sprite;
+  private btnRetentar?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Quiz');
@@ -96,10 +104,11 @@ export class QuizScene extends Phaser.Scene {
       .image(GAME_WIDTH / 2, top + 52, 'px')
       .setDisplaySize(PW - 60, 10)
       .setTint(0xdcc494);
+    this.larguraBarra = PW - 60;
     this.timerBar = this.add
-      .image(GAME_WIDTH / 2 - (PW - 60) / 2, top + 52, 'px')
+      .image(GAME_WIDTH / 2 - this.larguraBarra / 2, top + 52, 'px')
       .setOrigin(0, 0.5)
-      .setDisplaySize(PW - 60, 10)
+      .setDisplaySize(this.larguraBarra, 10)
       .setTint(0xa53434);
 
     // questão
@@ -162,16 +171,128 @@ export class QuizScene extends Phaser.Scene {
       .text(GAME_WIDTH / 2 + PW / 2 - 18, top + PH - 60, '', { fontFamily: FONTS.body, fontSize: uiPx(15), color: '#27408b' })
       .setOrigin(1, 0.5);
 
+    // pena da animação de escrita, escondida até alguém responder
+    this.pena = this.add
+      .sprite(GAME_WIDTH / 2, top + 168, 'pena')
+      .setScale(1.6)
+      .setVisible(false)
+      .setDepth(20);
+
+    this.buildCarregando(top + PH / 2 - 40);
+
     // timer loop
     this.timerEvent = this.time.addEvent({ delay: 100, loop: true, callback: () => this.tickTimer() });
 
-    this.newQuestion();
+    void this.newQuestion();
   }
 
   update() {
     // a Torre fica pausada enquanto o pergaminho está aberto, então o
     // cronômetro do desafio precisa continuar sendo alimentado aqui
     State.timerTick();
+  }
+
+  // ------------------------------------------------------- espera e escrita
+  /**
+   * Véu de carregamento sobre o pergaminho: livro abrindo e um recado.
+   *
+   * Enquanto ele está no ar o relógio não corre — `locked` barra o tick — e a
+   * contagem só começa quando a pergunta realmente chegou. Antes disso a tela
+   * ficava em branco e ninguém sabia se o jogo tinha travado.
+   */
+  private buildCarregando(y: number) {
+    const veu = this.add.image(0, 0, 'px').setDisplaySize(820, 300).setTint(0xf3e6c4).setAlpha(0.96);
+    const livro = this.add.sprite(0, -26, 'livro', '0').setScale(2.6);
+    const texto = this.add
+      .text(0, 40, '', {
+        fontFamily: FONTS.body, fontSize: uiPx(18), color: '#5b3a1e', align: 'center'
+      })
+      .setOrigin(0.5);
+
+    this.carregando = this.add
+      .container(GAME_WIDTH / 2, y, [veu, livro, texto])
+      .setDepth(30)
+      .setVisible(false);
+    this.carregando.setData('livro', livro);
+    this.carregando.setData('texto', texto);
+  }
+
+  private mostrarCarregando(recado: string) {
+    const livro = this.carregando.getData('livro') as Phaser.GameObjects.Sprite;
+    const texto = this.carregando.getData('texto') as Phaser.GameObjects.Text;
+    texto.setText(recado);
+    livro.play('livro-abrindo', true);
+    this.carregando.setVisible(true);
+    this.btnRetentar?.setVisible(false);
+  }
+
+  private esconderCarregando() {
+    (this.carregando.getData('livro') as Phaser.GameObjects.Sprite).stop();
+    this.carregando.setVisible(false);
+  }
+
+  /**
+   * Cavaleiro preenchendo a lacuna: a alternativa escolhida é escrita letra a
+   * letra no lugar do traço, com a pena riscando por cima.
+   *
+   * Roda enquanto o pedido está no ar, então a espera de rede vira parte da
+   * cena em vez de um congelamento.
+   */
+  private animarEscrita(escolhido: string): Promise<void> {
+    return new Promise((resolve) => {
+      const antes = this.question.antes ? `${this.question.antes} ` : '';
+      const depois = this.question.depois;
+      const alvo = escolhido.length > 34 ? `${escolhido.slice(0, 33)}…` : escolhido;
+
+      this.pena.setVisible(true).setAlpha(1);
+      this.tweens.add({
+        targets: this.pena,
+        x: { from: GAME_WIDTH / 2 - 90, to: GAME_WIDTH / 2 + 90 },
+        angle: { from: -8, to: 6 },
+        duration: 420,
+        ease: 'sine.inout'
+      });
+      this.tweens.add({
+        targets: this.pena, y: { from: this.pena.y, to: this.pena.y - 4 },
+        duration: 90, yoyo: true, repeat: 4
+      });
+
+      let i = 0;
+      this.time.addEvent({
+        delay: Math.max(14, 420 / Math.max(1, alvo.length)),
+        repeat: alvo.length - 1,
+        callback: () => {
+          i++;
+          const escrito = alvo.slice(0, i);
+          const resto = '_'.repeat(Math.max(0, alvo.length - i));
+          this.questionText.setText(`${antes}⟪ ${escrito}${resto} ⟫ ${depois}`);
+          if (i >= alvo.length) {
+            this.tweens.add({
+              targets: this.pena, alpha: 0, duration: 200,
+              onComplete: () => this.pena.setVisible(false)
+            });
+            resolve();
+          }
+        }
+      });
+    });
+  }
+
+  /** Botão de nova tentativa, para falha de rede não virar beco sem saída. */
+  private oferecerRetentativa(acao: () => void) {
+    this.btnRetentar?.destroy();
+    this.btnRetentar = makeButton(
+      this,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2 + 60,
+      '↻ Tentar novamente',
+      () => {
+        this.btnRetentar?.destroy();
+        this.btnRetentar = undefined;
+        acao();
+      },
+      20
+    ).setDepth(40);
   }
 
   // ------------------------------------------------------------- habilidades
@@ -373,7 +494,7 @@ export class QuizScene extends Phaser.Scene {
     if (this.ranqueado) {
       // no ranqueado a pergunta vem pronta do servidor, sem a resposta certa
       this.locked = true;
-      this.feedback.setColor('#5b3a1e').setText('Consultando Merlin...');
+      this.mostrarCarregando('Merlin abre o livro da Cerimônia...');
       try {
         const s = Ranqueado.exigir();
         const p = await Api.pergunta(s.runId, s.token, this.vela);
@@ -385,20 +506,24 @@ export class QuizScene extends Phaser.Scene {
           correta: '', opcoes: p.opcoes, indiceCorreta: -1
         };
         this.remaining = p.restanteMs / 1000;
+        this.duracaoQuestao = Math.max(1, this.remaining);
         this.frozen = p.congelada;
         this.noReset = p.semReset;
+        this.esconderCarregando();
         this.feedback.setText('');
+        // só agora o relógio começa: o tempo de rede não é do jogador
         this.locked = false;
         this.pintarQuestao(p.eliminadas);
         return;
       } catch (erro) {
-        if (this.scene.isActive()) this.falharRede(erro);
+        if (this.scene.isActive()) this.falharRede(erro, () => void this.newQuestion());
         return;
       }
     }
 
     this.question = generateQuestion(this.vela, d);
     this.remaining = d.tempo;
+    this.duracaoQuestao = d.tempo;
     this.lastTick = -1;
     this.timerBar.setTint(0xa53434);
 
@@ -437,11 +562,31 @@ export class QuizScene extends Phaser.Scene {
    * Corrida ranqueada exige servidor. Sem ele não dá para continuar sem
    * inventar estado — então explica e devolve o jogador à Torre.
    */
-  private falharRede(erro: unknown) {
-    const msg = erro instanceof ErroApi ? erro.message : 'falha de comunicação';
+  private falharRede(erro: unknown, tentarDeNovo?: () => void) {
+    const api = erro instanceof ErroApi ? erro : null;
+    const msg = api?.message ?? 'falha de comunicação';
     this.locked = true;
-    this.feedback.setColor('#7a1f1f').setText(`Corrida ranqueada interrompida:\n${msg}`);
-    this.time.delayedCall(2600, () => this.close());
+    this.pena.setVisible(false);
+
+    // 4xx é decisão do servidor (pergunta já respondida, corrida encerrada):
+    // insistir não muda nada. Falha de rede ou 5xx, sim.
+    const valeTentar = !!tentarDeNovo && (!api || api.status === 0 || api.status >= 500);
+
+    this.mostrarCarregando(
+      valeTentar
+        ? `Os arautos não responderam.\n${msg}`
+        : `Corrida ranqueada interrompida:\n${msg}`
+    );
+    (this.carregando.getData('livro') as Phaser.GameObjects.Sprite).stop();
+
+    if (valeTentar) {
+      this.oferecerRetentativa(() => {
+        this.esconderCarregando();
+        tentarDeNovo!();
+      });
+    } else {
+      this.time.delayedCall(2600, () => this.close());
+    }
   }
 
   private updateLocksText() {
@@ -455,9 +600,11 @@ export class QuizScene extends Phaser.Scene {
   private tickTimer() {
     if (this.locked || this.frozen) return;
     this.remaining = Math.max(0, this.remaining - 0.1);
-    const d = State.difficulty;
-    const frac = this.remaining / d.tempo;
-    this.timerBar.setDisplaySize(Math.max(1, (860 - 60) * frac), 10);
+    // fração da duração desta questão, não de d.tempo: no ranqueado o prazo do
+    // servidor inclui a folga de rede, e dividir por d.tempo passava de 100% —
+    // era isso que fazia a barra vermelha vazar para fora do pergaminho
+    const frac = Math.min(1, Math.max(0, this.remaining / this.duracaoQuestao));
+    this.timerBar.setDisplaySize(Math.max(1, this.larguraBarra * frac), 10);
     const whole = Math.ceil(this.remaining);
     if (this.remaining <= 3 && whole !== this.lastTick && this.remaining > 0) {
       this.lastTick = whole;
@@ -495,7 +642,15 @@ export class QuizScene extends Phaser.Scene {
     this.locked = true;
     try {
       const s = Ranqueado.exigir();
-      const r = await Api.responder(s.runId, s.token, this.questionId, escolha);
+      // a escrita roda em paralelo com o pedido: a latência vira cena, não
+      // congelamento. O texto vem do botão porque o cliente não sabe a resposta.
+      const escrita = escolha >= 0 && btn
+        ? this.animarEscrita(btn.text.text.replace(/^[A-D] · /, ''))
+        : Promise.resolve();
+      const [r] = await Promise.all([
+        Api.responder(s.runId, s.token, this.questionId, escolha),
+        escrita
+      ]);
       if (!this.scene.isActive()) return;
       Ranqueado.espelhar(r);
       this.question.indiceCorreta = r.indiceCorreta;
@@ -510,7 +665,9 @@ export class QuizScene extends Phaser.Scene {
         this.resolveWrong(r.expirou ? 'O tempo se esgotou!' : 'Resposta incorreta!');
       }
     } catch (erro) {
-      if (this.scene.isActive()) this.falharRede(erro);
+      if (this.scene.isActive()) {
+        this.falharRede(erro, () => void this.responderNoServidor(escolha, btn));
+      }
     } finally {
       this.aguardando = false;
     }

@@ -268,7 +268,13 @@ export class FinalScene extends Phaser.Scene {
       const r = await Ranqueado.submeter(capitulo.trim() || null);
       Ranqueado.encerrar();
       this.publicado = true;
-      this.botaoRanking?.setText(`✔ ${r.posicao}º lugar no modo ${modo}`).setColor('#8fbf6f');
+      this.botaoRanking
+        ?.setText(
+          r.superou
+            ? `✔ ${r.posicao}º lugar no modo ${modo}`
+            : `✔ ${r.posicao}º — vosso tempo anterior era melhor`
+        )
+        .setColor('#8fbf6f');
       return 'publicado';
     } catch (erro) {
       const msg = erro instanceof ErroApi ? erro.message : 'falha no envio';

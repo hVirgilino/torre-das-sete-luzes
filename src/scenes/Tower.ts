@@ -421,12 +421,14 @@ export class TowerScene extends Phaser.Scene {
       this.hudLayer.add(c);
       this.hudCandles.push(c);
     }
+    // alinhado à direita e terminando antes do botão, que ocupa o canto
     this.floorText = this.add
-      .text(GAME_WIDTH - 130, 16, '', { fontFamily: FONTS.display, fontSize: uiPx(16), color: '#f3e6c4' })
+      .text(GAME_WIDTH - 168, 16, '', { fontFamily: FONTS.display, fontSize: uiPx(16), color: '#f3e6c4' })
+      .setOrigin(1, 0)
       .setDepth(901);
     this.hudLayer.add(this.floorText);
     const menuBtn = this.add
-      .text(GAME_WIDTH - 24, 16, '‹ Voltar ao menu', {
+      .text(GAME_WIDTH - 16, 16, '‹ Voltar ao menu', {
         fontFamily: FONTS.display, fontSize: uiPx(15), color: '#ffc24d'
       })
       .setOrigin(1, 0)
@@ -486,7 +488,7 @@ export class TowerScene extends Phaser.Scene {
    */
   private buildBotaoDebug() {
     const btn = this.add
-      .text(GAME_WIDTH - 24, 44, '⚑ debug: acender tudo', {
+      .text(GAME_WIDTH - 16, 44, '⚑ debug: acender tudo', {
         fontFamily: FONTS.body,
         fontSize: uiPx(13),
         color: '#8890b8',

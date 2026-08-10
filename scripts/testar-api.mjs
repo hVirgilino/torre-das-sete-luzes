@@ -319,6 +319,46 @@ checar(
 for (const e of publicadas) await sql`delete from ranking where id = ${e.id}`;
 await sql`delete from run where nome in ('Medio','Rapido','Lento')`;
 
+secao('Uma entrada por jogador em cada dificuldade');
+
+await sql`delete from run where nome = 'Repetido'`;
+const cookieRep = (await chamar(rotas.login, { corpo: { senha: 'Virgilino391' }, ip: '198.51.100.91' }))
+  .cabecalhos['set-cookie'].split(';')[0];
+
+/** publica uma corrida com o tempo forçado, devolvendo o comprovante */
+async function publicar(ms, anteriores) {
+  const c = await chamar(rotas.start, { corpo: { nome: 'Repetido', dificuldade: 'demolay' } });
+  await chamar(rotas.debug, { corpo: { runId: c.corpo.runId, token: c.corpo.token }, cookie: cookieRep });
+  await chamar(rotas.finish, { corpo: { runId: c.corpo.runId, token: c.corpo.token } });
+  await sql`update run set duracao_ms = ${ms} where id = ${c.corpo.runId}`;
+  return chamar(rotas.submit, { corpo: { runId: c.corpo.runId, token: c.corpo.token, anteriores } });
+}
+
+const p1 = await publicar(50000, []);
+const comprovantes = [{ id: p1.corpo.entradaId, token: p1.corpo.entradaToken }];
+
+const p2 = await publicar(30000, comprovantes); // melhorou
+checar(p2.corpo.superou === true, 'tempo melhor substitui a entrada anterior');
+let linhas = (await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'demolay' } }))
+  .corpo.ranking.demolay.filter((e) => e.nome === 'Repetido');
+checar(linhas.length === 1 && linhas[0].duracaoMs === 30000,
+  `sobra uma entrada só, com o melhor tempo (${linhas.length} entrada(s))`);
+
+const p3 = await publicar(90000, [{ id: p2.corpo.entradaId, token: p2.corpo.entradaToken }]); // piorou
+checar(p3.corpo.superou === false, 'tempo pior nao substitui');
+linhas = (await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'demolay' } }))
+  .corpo.ranking.demolay.filter((e) => e.nome === 'Repetido');
+checar(linhas.length === 1 && linhas[0].duracaoMs === 30000,
+  `continua uma entrada, ainda a melhor (${linhas.map((e) => e.duracaoMs).join(',')})`);
+
+// sem comprovante nao ha como saber que e a mesma pessoa: duas entradas
+const p4 = await publicar(20000, []);
+linhas = (await chamar(rotas.ranking, { metodo: 'GET', query: { dificuldade: 'demolay' } }))
+  .corpo.ranking.demolay.filter((e) => e.nome === 'Repetido');
+checar(linhas.length === 2, `sem comprovante, o servidor nao funde (${linhas.length}) — limite conhecido`);
+
+await sql`delete from run where nome = 'Repetido'`;
+
 secao('Painel de moderação');
 
 checar((await chamar(rotas.entries, { metodo: 'GET' })).status === 401, 'listar sem sessao da 401');

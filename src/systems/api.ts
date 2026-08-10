@@ -39,8 +39,32 @@ async function pedir<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
   }
 }
 
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Repete o pedido quando a falha é transitória.
+ *
+ * Só rede caída (status 0, que inclui o estouro de tempo) e 5xx: um 4xx é
+ * decisão do servidor — pergunta já respondida, corrida encerrada, sequência
+ * errada — e insistir só gastaria o rate limit sem mudar a resposta.
+ */
+async function comRetentativa<T>(fn: () => Promise<T>, tentativas = 3): Promise<T> {
+  let ultima: unknown;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await fn();
+    } catch (erro) {
+      ultima = erro;
+      const transitorio = erro instanceof ErroApi && (erro.status === 0 || erro.status >= 500);
+      if (!transitorio || i === tentativas - 1) throw erro;
+      await espera(300 * 2 ** i); // 300ms, 600ms
+    }
+  }
+  throw ultima;
+}
+
 const post = <T,>(caminho: string, corpo: unknown) =>
-  pedir<T>(caminho, { method: 'POST', body: JSON.stringify(corpo) });
+  comRetentativa(() => pedir<T>(caminho, { method: 'POST', body: JSON.stringify(corpo) }));
 
 // ------------------------------------------------------------------- tipos
 export interface Vela {
@@ -147,15 +171,27 @@ export const Api = {
     post<FimDeCorrida>('/run/finish', { runId, token }),
 
   submeter: (runId: string, token: string, capitulo: string | null) =>
-    post<{ entradaId: string; entradaToken: string; posicao: number; dificuldade: string }>(
-      '/ranking/submit',
-      { runId, token, capitulo }
-    ),
+    post<{
+      entradaId: string;
+      entradaToken: string;
+      posicao: number;
+      dificuldade: string;
+      duracaoMs: number;
+      /** false quando a corrida anterior do jogador foi melhor e foi mantida */
+      superou: boolean;
+    }>('/ranking/submit', {
+      runId,
+      token,
+      capitulo,
+      // comprovantes das publicações deste navegador: o servidor troca a
+      // entrada antiga pela nova em vez de deixar o jogador ocupar dois lugares
+      anteriores: entradasPublicadas()
+    }),
 
   ranking: (dificuldade?: string, limite = 20) =>
-    pedir<{ ranking: Record<string, EntradaRanking[]> }>(
+    comRetentativa(() => pedir<{ ranking: Record<string, EntradaRanking[]> }>(
       `/ranking?limite=${limite}${dificuldade ? `&dificuldade=${encodeURIComponent(dificuldade)}` : ''}`
-    ),
+    )),
 
   minhasColocacoes: (entradas: { id: string; token: string }[]) =>
     post<{ melhor: Colocacao | null; posicoes: Colocacao[] }>('/ranking/me', { entradas })

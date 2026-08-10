@@ -23,6 +23,8 @@ export class BootScene extends Phaser.Scene {
     this.makeLock();
     this.makeStars();
     this.makeSombraMenu();
+    this.makeLivro();
+    this.makePena();
     this.makeKnight();
     this.makeCharacters();
     this.makeGlow();
@@ -618,6 +620,110 @@ export class BootScene extends Phaser.Scene {
     tex.refresh();
   }
 
+  /**
+   * Livro que abre — espera de carregamento do quiz.
+   *
+   * Seis quadros: fechado, entreaberto, aberto, e duas folhas virando. A
+   * animação percorre e volta, então o laço parece um livro sendo folheado em
+   * vez de reiniciar de solavanco.
+   */
+  private makeLivro() {
+    const W = 40;
+    const H = 32;
+    const QUADROS = 6;
+    const { tex, ctx } = this.ctxOf('livro', W * QUADROS, H);
+
+    const capa = '#7a1f1f';
+    const capaEscura = '#4a1010';
+    const folha = '#f3e6c4';
+    const folhaSombra = '#dcc494';
+    const dourado = '#d9a441';
+
+    for (let q = 0; q < QUADROS; q++) {
+      const ox = q * W;
+      // 0 = fechado, 1 = totalmente aberto
+      const abertura = Math.min(1, q / 3);
+      const meia = 4 + abertura * 14; // metade da largura de cada página
+
+      ctx.save();
+      ctx.translate(ox, 0);
+
+      // capa por baixo, acompanhando a abertura
+      ctx.fillStyle = capaEscura;
+      ctx.fillRect(20 - meia - 2, 8, (meia + 2) * 2, 20);
+
+      // páginas esquerda e direita
+      ctx.fillStyle = folha;
+      ctx.fillRect(20 - meia, 9, meia - 1, 18);
+      ctx.fillRect(21, 9, meia - 1, 18);
+      ctx.fillStyle = folhaSombra;
+      ctx.fillRect(20 - meia, 9, 2, 18);
+      ctx.fillRect(20 + meia - 2, 9, 2, 18);
+
+      // lombada
+      ctx.fillStyle = capa;
+      ctx.fillRect(19, 7, 3, 22);
+      ctx.fillStyle = dourado;
+      ctx.fillRect(19, 12, 3, 2);
+      ctx.fillRect(19, 22, 3, 2);
+
+      // linhas de texto aparecem conforme abre
+      if (abertura > 0.5) {
+        ctx.fillStyle = 'rgba(44,28,8,0.45)';
+        const linhas = q >= 4 ? 4 : 3;
+        for (let i = 0; i < linhas; i++) {
+          const y = 13 + i * 4;
+          ctx.fillRect(20 - meia + 3, y, meia - 5, 1);
+          ctx.fillRect(23, y, meia - 5, 1);
+        }
+      }
+
+      // folha virando nos dois últimos quadros
+      if (q >= 4) {
+        const giro = (q - 3) / 3;
+        ctx.fillStyle = folha;
+        ctx.beginPath();
+        ctx.moveTo(21, 9);
+        ctx.lineTo(21 + (meia - 1) * (1 - giro), 9 + 3 * giro);
+        ctx.lineTo(21 + (meia - 1) * (1 - giro), 27 - 3 * giro);
+        ctx.lineTo(21, 27);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    tex.refresh();
+    for (let q = 0; q < QUADROS; q++) tex.add(String(q), 0, q * W, 0, W, H);
+  }
+
+  /** Pena de escrever, para a animação de preencher a lacuna. */
+  private makePena() {
+    const { tex, ctx } = this.ctxOf('pena', 20, 24);
+    // haste
+    ctx.strokeStyle = '#2c1c08';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(4, 22);
+    ctx.lineTo(14, 6);
+    ctx.stroke();
+    // barbas da pena
+    ctx.fillStyle = '#f3e6c4';
+    ctx.beginPath();
+    ctx.moveTo(13, 7);
+    ctx.quadraticCurveTo(19, 2, 17, 12);
+    ctx.quadraticCurveTo(15, 10, 13, 7);
+    ctx.fill();
+    ctx.fillStyle = '#dcc494';
+    ctx.beginPath();
+    ctx.moveTo(13, 7);
+    ctx.quadraticCurveTo(17, 5, 16, 10);
+    ctx.fill();
+    // ponta molhada de tinta
+    ctx.fillStyle = '#27408b';
+    ctx.fillRect(3, 21, 3, 3);
+    tex.refresh();
+  }
+
   // ------------------------------------------------------------- estrelas
   /**
    * Estrela de conquista em dois estados: `star-on` (dourada, com um brilho
@@ -1014,6 +1120,13 @@ export class BootScene extends Phaser.Scene {
       key: 'candle-flame',
       frames: [{ key: 'candle-lit-0' }, { key: 'candle-lit-1' }],
       frameRate: 5,
+      repeat: -1
+    });
+    this.anims.create({
+      key: 'livro-abrindo',
+      // vai e volta: o laço vira folheio, não um recomeço seco
+      frames: [0, 1, 2, 3, 4, 5, 4, 3].map((i) => ({ key: 'livro', frame: String(i) })),
+      frameRate: 7,
       repeat: -1
     });
     // brilho das estrelas de pódio — a folha tem 24 quadros da faixa de luz
