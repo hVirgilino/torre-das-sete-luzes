@@ -644,6 +644,115 @@ export class BootScene extends Phaser.Scene {
       ctx.stroke();
       tex.refresh();
     }
+
+    this.makeStarsPodio(S, path);
+  }
+
+  /**
+   * Estrelas de pódio — só quem está no top 3 do ranking global as vê.
+   *
+   * O brilho é uma faixa de luz que atravessa a estrela; cada estilo é uma
+   * folha de sprites com a faixa deslocada quadro a quadro, tocada em loop.
+   * Fazer por spritesheet (e não por shader ou máscara em runtime) mantém o
+   * mesmo caminho procedural do resto da arte e não custa nada por frame.
+   */
+  private makeStarsPodio(S: number, path: (ctx: CanvasRenderingContext2D) => void) {
+    const QUADROS = 24;
+
+    interface Estilo {
+      chave: string;
+      /** fundo da estrela, por baixo da faixa de luz */
+      base: string[];
+      /** cores da faixa; várias = arco-íris da lendária */
+      faixa: string[];
+      contorno: string;
+      /** largura da faixa em fração da estrela */
+      largura: number;
+    }
+
+    const estilos: Estilo[] = [
+      {
+        // top 1: preta, com a faixa passando por todas as cores
+        chave: 'star-lenda',
+        base: ['#15121f', '#07060c'],
+        faixa: ['#ff3b6b', '#ffb03b', '#f7ff3b', '#3bff8a', '#3bd9ff', '#8a3bff', '#ff3b6b'],
+        contorno: '#ffe9a8',
+        largura: 1.5
+      },
+      {
+        // top 2: platina — prata fria com estouro branco
+        chave: 'star-platina',
+        base: ['#f2f5ff', '#9aa6cf'],
+        faixa: ['#ffffff', '#dfe7ff', '#ffffff'],
+        contorno: '#6a7699',
+        largura: 0.7
+      },
+      {
+        // top 3: bronze quente e radiante
+        chave: 'star-bronze',
+        base: ['#e2a04f', '#8a4a1c'],
+        faixa: ['#ffe0a8', '#ff9d3d', '#ffe0a8'],
+        contorno: '#5a2f10',
+        largura: 0.7
+      }
+    ];
+
+    for (const estilo of estilos) {
+      const { tex, ctx } = this.ctxOf(estilo.chave, S * QUADROS, S);
+
+      for (let q = 0; q < QUADROS; q++) {
+        const ox = q * S;
+        const avanco = q / QUADROS;
+
+        ctx.save();
+        ctx.translate(ox, 0);
+        path(ctx);
+        ctx.clip();
+
+        const fundo = ctx.createLinearGradient(0, 0, 0, S);
+        fundo.addColorStop(0, estilo.base[0]);
+        fundo.addColorStop(1, estilo.base[1]);
+        ctx.fillStyle = fundo;
+        ctx.fillRect(0, 0, S, S);
+
+        // a faixa corre na diagonal e dá duas voltas por ciclo, para o brilho
+        // não parecer que "reinicia" quando a folha reinicia
+        const alcance = S * estilo.largura;
+        const desloc = -alcance + avanco * (S + alcance * 2);
+        const luz = ctx.createLinearGradient(desloc, 0, desloc + alcance, S);
+        luz.addColorStop(0, 'rgba(255,255,255,0)');
+        estilo.faixa.forEach((cor, i) => {
+          const t = (i + 1) / (estilo.faixa.length + 1);
+          luz.addColorStop(t, cor);
+        });
+        luz.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.globalAlpha = estilo.chave === 'star-lenda' ? 0.95 : 0.8;
+        ctx.globalCompositeOperation = estilo.chave === 'star-lenda' ? 'source-over' : 'lighter';
+        ctx.fillStyle = luz;
+        ctx.fillRect(0, 0, S, S);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+
+        // lustro fixo na ponta de cima, para não ficar chapada
+        const lustro = ctx.createRadialGradient(S / 2, S * 0.3, 1, S / 2, S * 0.3, S * 0.45);
+        lustro.addColorStop(0, 'rgba(255,255,255,0.35)');
+        lustro.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = lustro;
+        ctx.fillRect(0, 0, S, S);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(ox, 0);
+        path(ctx);
+        ctx.strokeStyle = estilo.contorno;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      tex.refresh();
+      for (let q = 0; q < QUADROS; q++) tex.add(String(q), 0, q * S, 0, S, S);
+    }
   }
 
   // ---------------------------------------------------------------- cavaleiro
@@ -885,6 +994,15 @@ export class BootScene extends Phaser.Scene {
       frameRate: 5,
       repeat: -1
     });
+    // brilho das estrelas de pódio — a folha tem 24 quadros da faixa de luz
+    for (const chave of ['star-lenda', 'star-platina', 'star-bronze']) {
+      this.anims.create({
+        key: `${chave}-brilho`,
+        frames: Array.from({ length: 24 }, (_, i) => ({ key: chave, frame: String(i) })),
+        frameRate: 18,
+        repeat: -1
+      });
+    }
     this.anims.create({
       key: 'torch-flame',
       frames: [{ key: 'torch-flame-0' }, { key: 'torch-flame-1' }],

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Moderação · A Torre das Sete Luzes</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px; background: #0b1026; color: #f3e6c4;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; color: #ffc24d; letter-spacing: 1px; }
+    .sub { color: #8890b8; font-size: 13px; margin-bottom: 20px; }
+    .painel {
+      background: #14182e; border: 1px solid #2a2f45; border-radius: 8px;
+      padding: 18px; max-width: 420px;
+    }
+    label { display: block; font-size: 13px; color: #aeb8e8; margin-bottom: 6px; }
+    input[type=password], input[type=text] {
+      width: 100%; padding: 9px 11px; border-radius: 5px; font-size: 15px;
+      border: 1px solid #3a4472; background: #0b1026; color: #f3e6c4;
+    }
+    button {
+      padding: 9px 16px; border-radius: 5px; border: 1px solid #7a5b23;
+      background: #7a1f1f; color: #f6ecd2; font-size: 14px; cursor: pointer;
+    }
+    button:hover { background: #963030; }
+    button.sec { background: #2a2f45; border-color: #3a4472; }
+    button.sec:hover { background: #3a4472; }
+    #erro { color: #ff8a8a; font-size: 13px; min-height: 18px; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #2a2f45; }
+    th { color: #8890b8; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+    tr.oculto { opacity: .45; }
+    .tag {
+      font-size: 11px; padding: 2px 7px; border-radius: 10px;
+      background: #2a2f45; color: #aeb8e8;
+    }
+    .suspeito { color: #ff8a3c; }
+    .acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+    .oculto-nome { text-decoration: line-through; color: #8890b8; }
+    .rolagem { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Moderação do ranking</h1>
+  <div class="sub">A Torre das Sete Luzes</div>
+
+  <div id="login" class="painel">
+    <label for="senha">Senha de moderação</label>
+    <input id="senha" type="password" autocomplete="current-password" />
+    <div id="erro"></div>
+    <button id="entrar" style="margin-top:12px">Entrar</button>
+  </div>
+
+  <div id="area" hidden>
+    <div class="acoes" style="margin-bottom:8px">
+      <button class="sec" id="recarregar">Recarregar</button>
+      <span class="sub" id="resumo" style="margin:0;align-self:center"></span>
+    </div>
+    <div class="rolagem">
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th><th>Capítulo</th><th>Modo</th><th>Tempo</th>
+            <th>Acertos</th><th>Quando</th><th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="linhas"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+
+/**
+ * Escapa antes de inserir no DOM. Nome e capítulo são texto livre digitado por
+ * jogadores: mesmo o servidor limpando invisíveis, quem monta HTML por
+ * concatenação precisa escapar — este painel é o único lugar do projeto que
+ * renderiza esse texto como HTML, e não como canvas.
+ */
+const esc = (v) =>
+  String(v ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+  );
+
+const relogio = (ms) => {
+  const t = Math.round(ms / 1000);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+};
+
+async function api(caminho, opcoes = {}) {
+  const r = await fetch(`/api${caminho}`, {
+    ...opcoes,
+    headers: { 'Content-Type': 'application/json', ...(opcoes.headers ?? {}) }
+  });
+  const corpo = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(corpo.erro ?? `erro ${r.status}`);
+  return corpo;
+}
+
+$('entrar').onclick = async () => {
+  $('erro').textContent = '';
+  try {
+    await api('/admin/login', { method: 'POST', body: JSON.stringify({ senha: $('senha').value }) });
+    $('senha').value = '';
+    $('login').hidden = true;
+    $('area').hidden = false;
+    carregar();
+  } catch (e) {
+    $('erro').textContent = e.message;
+  }
+};
+$('senha').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('entrar').click(); });
+$('recarregar').onclick = () => carregar();
+
+async function carregar() {
+  let dados;
+  try {
+    dados = await api('/admin/entries');
+  } catch (e) {
+    // sessão expirou (2h) — volta para o login em vez de mostrar tabela vazia
+    $('area').hidden = true;
+    $('login').hidden = false;
+    $('erro').textContent = e.message;
+    return;
+  }
+  const linhas = dados.entradas;
+  $('resumo').textContent = `${linhas.length} entrada(s)`;
+  $('linhas').innerHTML = linhas.map(montarLinha).join('');
+  for (const b of document.querySelectorAll('[data-acao]')) {
+    b.onclick = () => moderar(b.dataset.id, b.dataset.acao);
+  }
+}
+
+function montarLinha(e) {
+  // tempo muito baixo com poucos acertos é o cheiro de linha forjada
+  const suspeito = e.duracaoMs < 60000 || e.acertos < 35;
+  const nome = e.nomeExibicao
+    ? `<span class="oculto-nome">${esc(e.nome)}</span> → ${esc(e.nomeExibicao)}`
+    : esc(e.nome);
+  return `
+    <tr class="${e.oculto ? 'oculto' : ''}">
+      <td>${nome}</td>
+      <td>${esc(e.capitulo ?? '—')}</td>
+      <td><span class="tag">${esc(e.dificuldade)}</span></td>
+      <td class="${suspeito ? 'suspeito' : ''}">${relogio(e.duracaoMs)}</td>
+      <td class="${suspeito ? 'suspeito' : ''}">${e.acertos}✓ / ${e.erros}✗</td>
+      <td>${esc(new Date(e.criadoEm).toLocaleString('pt-BR'))}</td>
+      <td class="acoes">
+        ${e.oculto
+          ? `<button class="sec" data-id="${esc(e.id)}" data-acao="restaurar">Restaurar</button>`
+          : `<button data-id="${esc(e.id)}" data-acao="ocultar">Ocultar</button>
+             <button class="sec" data-id="${esc(e.id)}" data-acao="censurar">Censurar nome</button>`}
+      </td>
+    </tr>`;
+}
+
+async function moderar(id, acao) {
+  let nomeExibicao = null;
+  if (acao === 'censurar') {
+    nomeExibicao = prompt('Nome a exibir no lugar:', 'Cavaleiro anônimo');
+    if (nomeExibicao === null) return;
+  }
+  const motivo = acao === 'restaurar' ? null : prompt('Motivo (fica no log):', '') ?? null;
+  try {
+    await api('/admin/moderate', {
+      method: 'POST',
+      body: JSON.stringify({ id, acao, motivo, nomeExibicao })
+    });
+    carregar();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+</script>
+</body>
+</html>

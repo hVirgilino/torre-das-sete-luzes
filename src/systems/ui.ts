@@ -11,23 +11,59 @@ import { uiPx } from './display';
  * O container guarda as imagens na ordem, para quem chamou poder animar
  * individualmente as estrelas recém-conquistadas.
  */
+export type EstiloEstrela = 'padrao' | 'lenda' | 'platina' | 'bronze';
+
+/** posição no ranking global → estilo da estrela; fora do pódio é o dourado normal */
+export function estiloPorPosicao(posicao: number | null | undefined): EstiloEstrela {
+  if (posicao === 1) return 'lenda';
+  if (posicao === 2) return 'platina';
+  if (posicao === 3) return 'bronze';
+  return 'padrao';
+}
+
+const TEXTURA_PODIO: Record<Exclude<EstiloEstrela, 'padrao'>, string> = {
+  lenda: 'star-lenda',
+  platina: 'star-platina',
+  bronze: 'star-bronze'
+};
+
 export function makeStarRow(
   scene: Phaser.Scene,
   x: number,
   y: number,
   earned: number,
-  scale = 1
-): { container: Phaser.GameObjects.Container; stars: Phaser.GameObjects.Image[] } {
+  scale = 1,
+  estilo: EstiloEstrela = 'padrao'
+): { container: Phaser.GameObjects.Container; stars: Phaser.GameObjects.Sprite[] } {
   const gap = 46 * scale;
-  const stars: Phaser.GameObjects.Image[] = [];
+  const stars: Phaser.GameObjects.Sprite[] = [];
   for (let i = 0; i < MAX_ESTRELAS; i++) {
     const on = i < earned;
-    const img = scene.add
-      .image((i - (MAX_ESTRELAS - 1) / 2) * gap, 0, on ? 'star-on' : 'star-off')
+    const sp = scene.add
+      .sprite((i - (MAX_ESTRELAS - 1) / 2) * gap, 0, on ? 'star-on' : 'star-off')
       .setScale(scale);
-    stars.push(img);
+    // o brilho de pódio só vale para estrela já conquistada: o lugar vazio
+    // continua apagado, senão a vitrine mentiria sobre o que falta vencer
+    if (on && estilo !== 'padrao') aplicarEstiloEstrela(sp, estilo, i);
+    stars.push(sp);
   }
   return { container: scene.add.container(x, y, stars), stars };
+}
+
+/** Troca uma estrela já acesa pelo brilho de pódio, com defasagem entre elas. */
+export function aplicarEstiloEstrela(
+  sp: Phaser.GameObjects.Sprite,
+  estilo: EstiloEstrela,
+  indice = 0
+) {
+  if (estilo === 'padrao') {
+    sp.stop();
+    sp.setTexture('star-on');
+    return;
+  }
+  const chave = TEXTURA_PODIO[estilo];
+  sp.setTexture(chave, '0');
+  sp.play({ key: `${chave}-brilho`, delay: indice * 140 }, true);
 }
 
 /** Botão de texto medieval com hover/tap */

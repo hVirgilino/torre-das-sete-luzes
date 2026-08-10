@@ -1,10 +1,15 @@
 import Phaser from 'phaser';
-import { DESIGN_DX, DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
+import {
+  DESIGN_DX, DIFFICULTIES, FONTS, GAME_HEIGHT, GAME_WIDTH, dificuldadePorId
+} from '../data/config';
 import { MOON_X } from './Boot';
 import { nextTrack, trackById, TRACKS } from '../data/tracks';
 import { State, formatClock } from '../systems/state';
 import { Audio } from '../systems/audio';
-import { makeButton, makeSlider, makeStarRow, fadeOut } from '../systems/ui';
+import {
+  makeButton, makeSlider, makeStarRow, aplicarEstiloEstrela, estiloPorPosicao, fadeOut
+} from '../systems/ui';
+import { Api, entradasPublicadas } from '../systems/api';
 import {
   RESOLUTIONS, initSceneView, isAutoResolution, renderScale, resolutionOf, uiScale
 } from '../systems/display';
@@ -73,11 +78,12 @@ export class MenuScene extends Phaser.Scene {
 
     const novo = makeButton(this, GAME_WIDTH / 2, 280, 'Novo Jogo', () => this.startNewGame());
     const cont = makeButton(this, GAME_WIDTH / 2, 335, 'Continuar', () => this.continueGame());
-    const opts = makeButton(this, GAME_WIDTH / 2, 390, 'Opções', () => this.toggleOptions());
+    const rank = makeButton(this, GAME_WIDTH / 2, 390, 'Ranking', () => this.abrirRanking());
+    const opts = makeButton(this, GAME_WIDTH / 2, 442, 'Opções', () => this.toggleOptions());
     if (!State.hasSave) {
       cont.setAlpha(0.35).disableInteractive();
     }
-    this.menuItems.push(novo, cont, opts);
+    this.menuItems.push(novo, cont, rank, opts);
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 18, 'toque ou clique para liberar o som', {
@@ -120,6 +126,7 @@ export class MenuScene extends Phaser.Scene {
         s.setAlpha(0.5);
       }
     });
+    this.aplicarBrilhoDePodio(stars);
 
     const vencidas = DIFFICULTIES.filter((d) => State.trophies.records[d.id] !== undefined);
     if (!vencidas.length) return;
@@ -146,6 +153,37 @@ export class MenuScene extends Phaser.Scene {
       );
     });
     this.menuItems.push(this.add.container(24, 26, kids));
+  }
+
+  /**
+   * Pergunta ao servidor a melhor colocação deste navegador e, se for pódio,
+   * troca as estrelas pelo brilho correspondente.
+   *
+   * Assíncrono e tolerante a falha de propósito: sem rede, ou rodando fora da
+   * Vercel, o menu simplesmente fica com as estrelas douradas de sempre.
+   */
+  private async aplicarBrilhoDePodio(stars: Phaser.GameObjects.Sprite[]) {
+    const entradas = entradasPublicadas();
+    if (!entradas.length || !State.stars) return;
+    try {
+      const { melhor } = await Api.minhasColocacoes(entradas);
+      const estilo = estiloPorPosicao(melhor?.posicao);
+      if (estilo === 'padrao') return;
+      // a cena pode ter sido trocada enquanto o pedido ia e voltava
+      if (!this.scene.isActive()) return;
+      stars.forEach((s, i) => {
+        if (i < State.stars && s.active) aplicarEstiloEstrela(s, estilo, i);
+      });
+      const rotulo = { lenda: '1º do mundo', platina: '2º do mundo', bronze: '3º do mundo' }[estilo];
+      const faixa = this.add
+        .text(GAME_WIDTH / 2, 252, `★ ${rotulo} · ${dificuldadePorId(melhor!.dificuldade)?.nome ?? ''}`, {
+          fontFamily: FONTS.display, fontSize: '14px', color: '#ffc24d'
+        })
+        .setOrigin(0.5);
+      this.menuItems.push(faixa);
+    } catch {
+      /* ranking indisponível — o menu não deve nem piscar por causa disso */
+    }
   }
 
   // ---------------------------------------------------------- atmosfera
@@ -259,6 +297,12 @@ export class MenuScene extends Phaser.Scene {
     await new Promise((r) => this.time.delayedCall(1000, r));
     await fadeOut(this, 800);
     this.scene.start('Intro');
+  }
+
+  private async abrirRanking() {
+    if (this.optionsPanel) this.toggleOptions();
+    await fadeOut(this, 350);
+    this.scene.start('Ranking');
   }
 
   private continueGame() {
