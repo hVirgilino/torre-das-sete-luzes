@@ -41,7 +41,8 @@ export class MenuScene extends Phaser.Scene {
 
     // velas flutuantes decorativas
     for (let i = 0; i < 3; i++) {
-      const c = this.add.sprite(120 + i * 60, 480 - i * 12, 'candle-lit-0').setScale(1.4);
+      // começam em 170: antes a primeira caía sobre a vitrine de estrelas
+      const c = this.add.sprite(170 + i * 60, 480 - i * 12, 'candle-lit-0').setScale(1.4);
       c.play({ key: 'candle-flame', delay: i * 180 });
     }
 
@@ -122,7 +123,7 @@ export class MenuScene extends Phaser.Scene {
     const forcado = new URLSearchParams(location.search).get('podio') as EstiloEstrela | null;
 
     const { container, stars } = makeStarRow(
-      this, GAME_WIDTH - 78, GAME_HEIGHT - 30, forcado ? MAX_ESTRELAS : State.stars, 0.62,
+      this, 78, GAME_HEIGHT - 30, forcado ? MAX_ESTRELAS : State.stars, 0.62,
       forcado ? Array(MAX_ESTRELAS).fill(forcado) : []
     );
     container.setDepth(20);
@@ -247,8 +248,7 @@ export class MenuScene extends Phaser.Scene {
   // ------------------------------------------------------------- vitrola
   private buildVitrola() {
     const x = GAME_WIDTH - 70;
-    // subiu para abrir espaço às estrelas, que agora ficam no canto de baixo
-    const y = GAME_HEIGHT - 84;
+    const y = GAME_HEIGHT - 64;
 
     const box = this.add.image(0, 0, 'vitrola').setOrigin(0.5, 1);
     const disc = this.add.image(-12, -12, 'vitrola-disc').setScale(1.3);
