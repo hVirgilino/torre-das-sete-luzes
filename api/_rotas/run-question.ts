@@ -64,7 +64,11 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
         eliminadas: aberta.eliminadas,
         congelada: aberta.congelada,
         semReset: aberta.sem_reset,
-        restanteMs: Math.max(0, new Date(aberta.prazo_em).getTime() - Date.now()),
+        // a folga é do servidor, não do jogador: sai da conta antes de virar barra
+        restanteMs: Math.max(
+          0,
+          new Date(aberta.prazo_em).getTime() - FOLGA_REDE_MS - Date.now()
+        ),
         ...estadoPublico(corrida)
       });
     }
@@ -77,15 +81,24 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
 
   const historico = corrida.historico ?? { sentencas: [], spans: [] };
   const q = generateQuestion(vela, dif, historico);
-  const prazoMs = dif.tempo * 1000 + FOLGA_REDE_MS;
+  // Dois números diferentes de propósito: a barra do jogador conta o tempo da
+  // dificuldade, o prazo gravado conta esse tempo mais a folga. Devolver o prazo
+  // cheio em `restanteMs` anulava a folga — a barra passava a durar exatamente o
+  // que o servidor esperava, e qualquer latência fazia o prazo vencer com a
+  // barra ainda na tela.
+  const tempoVisivelMs = dif.tempo * 1000;
+  const prazoMs = tempoVisivelMs + FOLGA_REDE_MS;
+  // Gravado pelo relógio desta função, não pelo `now()` do Postgres: quem compara
+  // com `prazo_em` depois é sempre um `Date.now()` daqui, e misturar os dois
+  // relógios põe a diferença entre eles dentro do prazo do jogador.
+  const prazoEm = new Date(Date.now() + prazoMs);
 
   const criadas = (await sql`
     insert into run_question
       (run_id, vela, origem, antes, depois, correta, indice_correta, opcoes, prazo_em)
     values
       (${corrida.id}, ${vela}, ${q.origem}, ${q.antes}, ${q.depois}, ${q.correta},
-       ${q.indiceCorreta}, ${JSON.stringify(q.opcoes)}::jsonb,
-       now() + make_interval(secs => ${prazoMs / 1000}))
+       ${q.indiceCorreta}, ${JSON.stringify(q.opcoes)}::jsonb, ${prazoEm})
     returning id
   `) as unknown as { id: string }[];
 
@@ -103,7 +116,7 @@ export default rota(async (req: VercelRequest, res: VercelResponse) => {
     eliminadas: [],
     congelada: false,
     semReset: false,
-    restanteMs: prazoMs,
+    restanteMs: tempoVisivelMs,
     ...estadoPublico(corrida)
   });
 });

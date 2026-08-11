@@ -37,6 +37,12 @@ export const TOTAL_VELAS = VELAS_DA_TORRE;
  * Folga de rede somada ao prazo da questão. Sem ela, quem joga em 4G perderia
  * questões por latência, não por não saber a resposta. Um segundo e meio é
  * generoso o bastante para o pior caso e curto demais para virar vantagem.
+ *
+ * A folga é do servidor e o jogador não a vê: `prazo_em` guarda o tempo da
+ * dificuldade MAIS a folga, e o `restanteMs` que vai para a barra sai sempre com
+ * ela descontada. Entregar o prazo cheio ao cliente é o mesmo que não ter folga
+ * nenhuma — a barra passa a acabar junto com o prazo, e a viagem de ida e volta
+ * cai toda em cima do jogador.
  */
 export const FOLGA_REDE_MS = 1500;
 

@@ -600,9 +600,10 @@ export class QuizScene extends Phaser.Scene {
   private tickTimer() {
     if (this.locked || this.frozen) return;
     this.remaining = Math.max(0, this.remaining - 0.1);
-    // fração da duração desta questão, não de d.tempo: no ranqueado o prazo do
-    // servidor inclui a folga de rede, e dividir por d.tempo passava de 100% —
-    // era isso que fazia a barra vermelha vazar para fora do pergaminho
+    // fração da duração desta questão, não de d.tempo: no ranqueado uma questão
+    // retomada volta com menos tempo do que a dificuldade dá, e dividir por
+    // d.tempo passava de 100% — era isso que fazia a barra vermelha vazar para
+    // fora do pergaminho
     const frac = Math.min(1, Math.max(0, this.remaining / this.duracaoQuestao));
     this.timerBar.setDisplaySize(Math.max(1, this.larguraBarra * frac), 10);
     const whole = Math.ceil(this.remaining);
