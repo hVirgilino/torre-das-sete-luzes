@@ -18,8 +18,28 @@ export interface Difficulty {
   tempo: number;
   /** número de alternativas exibidas */
   opcoes: number;
-  /** quantas palavras somem por lacuna: 'palavra' | 'palavras' | 'frase' */
-  lacuna: 'palavra' | 'palavras' | 'frase';
+  /** quantas palavras somem por lacuna: [mínimo, máximo] */
+  palavras: [number, number];
+  /**
+   * De onde vêm as alternativas falsas:
+   * - `texto`: recortes de outros trechos da Cerimônia (o assunto errado entrega);
+   * - `misto`: uma variação da própria resposta, o resto de outros trechos;
+   * - `proximo`: todas variações da resposta, a uma palavra de distância.
+   */
+  distratores: 'texto' | 'misto' | 'proximo';
+  /**
+   * Chance de a questão sair da vela do andar em que se está. O resto vem do
+   * banco liberado — quanto menor, mais o jogador precisa conhecer a Cerimônia
+   * inteira, e não só o trecho que acabou de ler na porta.
+   */
+  focoVela: number;
+  /**
+   * Se as **outras** velas também podem cair como pergunta. Nos modos brandos
+   * não: o jogador ainda está lendo o texto de cada vela ao chegar nela, e ser
+   * arguido sobre um andar que não visitou seria injusto. Do DeMolay para cima
+   * a Cerimônia se cobra inteira, em qualquer ordem.
+   */
+  todasAsVelas: boolean;
   /** quais partes do texto entram no banco de questões */
   banco: Array<'vela' | 'abertura' | 'encerramento'>;
   /** estrelas que concluir esta dificuldade garante (Escudeiro não dá nenhuma) */
@@ -35,13 +55,18 @@ export const MAX_ESTRELAS = 3;
 
 /**
  * Trancas por vela, por dificuldade — a curva de esforço de cada modo.
- * O Escudeiro é uma passada de reconhecimento; o Cavaleiro é a maratona.
+ *
+ * O Cavaleiro já subiu até 14 trancas na última vela e a conta não fechava: 56
+ * acertos com o mesmo tipo de pergunta viram repetição, não desafio. Ele agora
+ * usa a mesma escada do DeMolay (1 a 7) e cobra o preço em outro lugar — cinco
+ * segundos, questões de qualquer ponto da Cerimônia e quatro alternativas que
+ * diferem por uma palavra (ver `distratores` e `focoVela`).
  */
 const TRANCAS = {
   escudeiro: [1, 1, 1, 1, 1, 1, 1],
   iniciatico: [2, 2, 2, 4, 4, 4, 4],
   demolay: [1, 2, 3, 4, 5, 6, 7],
-  cavaleiro: [2, 4, 6, 8, 10, 12, 14]
+  cavaleiro: [1, 2, 3, 4, 5, 6, 7]
 } as const;
 
 /** Número de velas da Torre — a contagem não muda com a dificuldade. */
@@ -62,10 +87,13 @@ export const DIFFICULTIES: Difficulty[] = [
     id: 'escudeiro',
     trancas: [...TRANCAS.escudeiro],
     nome: 'Escudeiro',
-    descricao: '20s · 2 opções · poucas palavras',
+    descricao: '20s · 2 opções · uma palavra',
     tempo: 20,
     opcoes: 2,
-    lacuna: 'palavra',
+    palavras: [1, 1],
+    distratores: 'texto',
+    focoVela: 1,
+    todasAsVelas: false,
     banco: ['vela'],
     estrelas: 0,
     mensagemFinal:
@@ -76,10 +104,13 @@ export const DIFFICULTIES: Difficulty[] = [
     id: 'iniciatico',
     trancas: [...TRANCAS.iniciatico],
     nome: 'Iniciático',
-    descricao: '15s · 3 opções · mais palavras',
+    descricao: '15s · 3 opções · duas ou três palavras',
     tempo: 15,
     opcoes: 3,
-    lacuna: 'palavras',
+    palavras: [2, 3],
+    distratores: 'texto',
+    focoVela: 0.7,
+    todasAsVelas: false,
     banco: ['vela', 'abertura'],
     estrelas: 1,
     mensagemFinal:
@@ -90,30 +121,40 @@ export const DIFFICULTIES: Difficulty[] = [
     id: 'demolay',
     trancas: [...TRANCAS.demolay],
     nome: 'DeMolay',
-    descricao: '10s · 4 opções · frases inteiras',
+    descricao: '10s · 4 opções · frases inteiras · uma pegadinha por questão',
     tempo: 10,
     opcoes: 4,
-    lacuna: 'frase',
+    palavras: [4, 6],
+    distratores: 'misto',
+    focoVela: 0.6,
+    todasAsVelas: true,
     banco: ['vela', 'abertura', 'encerramento'],
     estrelas: 2,
     mensagemFinal:
       'Duas estrelas, Sir. Recitastes a Cerimônia inteira sem hesitar — poucos ' +
-      'chegam aqui. Resta a prova do Cavaleiro: as mesmas palavras, metade do tempo.'
+      'chegam aqui. Resta a prova do Cavaleiro: as mesmas trancas, metade do ' +
+      'tempo e quatro alternativas separadas por uma única palavra.'
   },
   {
     id: 'cavaleiro',
     trancas: [...TRANCAS.cavaleiro],
     nome: 'Cavaleiro',
-    descricao: '5s · 4 opções · frases inteiras',
+    descricao: '5s · 4 opções quase idênticas · Cerimônia inteira',
     tempo: 5,
     opcoes: 4,
-    lacuna: 'frase',
+    palavras: [5, 7],
+    distratores: 'proximo',
+    // 45%: no Cavaleiro a vela do andar quase não protege — a maioria das
+    // questões vem da abertura e do encerramento, as partes que ninguém decora
+    focoVela: 0.45,
+    todasAsVelas: true,
     banco: ['vela', 'abertura', 'encerramento'],
     estrelas: 3,
     mensagemFinal:
-      'Sois digno deste grau, Sir. Vencestes a Torre na maior dificuldade, com o ' +
-      'tempo correndo contra vós a cada palavra. As três estrelas são vossas — ' +
-      'nada mais há nesta Torre que possa vos ensinar.'
+      'Sois digno deste grau, Sir. Vencestes a Torre onde as quatro alternativas ' +
+      'se distinguem por uma palavra só, e ainda assim escolhestes a da ' +
+      'Cerimônia. As três estrelas são vossas — nada mais há nesta Torre que ' +
+      'possa vos ensinar.'
   }
 ];
 

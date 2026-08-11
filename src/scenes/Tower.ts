@@ -436,7 +436,8 @@ export class TowerScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.sairParaMenu());
     this.hudLayer.add(menuBtn);
-    this.buildBotaoDebug();
+    // só no `npm run dev`: o build de produção não cria o botão (ver o método)
+    if (import.meta.env.DEV) this.buildBotaoDebug();
 
     // no touch o prompt sobe: os direcionais ocupam a faixa de baixo
     this.promptText = this.add
@@ -485,6 +486,13 @@ export class TowerScene extends Phaser.Scene {
    * Só no modo casual, de propósito. Numa corrida ranqueada quem manda é o
    * servidor — ele conta os acertos e recusaria o `finish`. Um botão que
    * "funciona" na tela e depois falha no fim seria pior que não existir.
+   *
+   * E só no `npm run dev`: quem chama guarda o `import.meta.env.DEV`, que o
+   * Vite substitui por `false` no build, então a chamada some e o botão nunca
+   * nasce em produção — o testador não deve ver um atalho que pula o jogo
+   * inteiro. O código fica porque continua sendo útil no desenvolvimento; o
+   * método sobra no bundle (método de classe não é removido por dead code),
+   * mas sem chamada viva ele é só bytes parados.
    */
   private buildBotaoDebug() {
     const btn = this.add

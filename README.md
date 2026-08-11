@@ -38,6 +38,33 @@ npx gh-pages -d dist
 
 Ou use GitHub Actions (Settings → Pages → Source: GitHub Actions → workflow "Static HTML" apontando para `dist`).
 
+## Variáveis de ambiente
+
+Todas estão descritas em `.env.example` — copie para `.env.local` (ignorado pelo
+git) ou use `vercel env pull .env.local`.
+
+| Variável | Para quê |
+|---|---|
+| `DATABASE_URL` / `DATABASE_URL_UNPOOLED` | Postgres do ranking e das corridas |
+| `APP_SECRET` | assina os tokens de corrida entregues ao cliente |
+| `SESSION_SECRET` | assina o cookie de sessão do painel de moderação |
+| `ADMIN_PASSWORD_HASH` | senha do painel (`npm run admin:hash -- "senha"`) |
+| `MANUTENCAO_CODIGO` | código do cofre da tela de manutenção — **padrão `199`** |
+| `MANUTENCAO_HASH` | senha só da manutenção; sem ela vale `ADMIN_PASSWORD_HASH` |
+
+### Tela de manutenção
+
+Enquanto o Boot abrir `Manutencao` no lugar de `Menu`, quem entra vê o recado e
+um **cofre digital** desenhado abaixo do cavaleiro. Digitar o código (teclado
+numérico na tela ou o teclado físico) chama `POST /api/manutencao`, e o acerto
+grava a liberação no `localStorage` deste navegador.
+
+Vale lembrar que isso é uma **tranca social**, não uma fronteira de segurança:
+três dígitos são mil combinações e quem segura a força bruta é o rate limit da
+rota. Atravessar a manutenção não dá poder nenhum sobre o jogo nem sobre o
+banco. Defina `MANUTENCAO_CODIGO=` (vazio) para desligar o cofre e exigir a
+senha via scrypt.
+
 ## Controles
 
 | Ação | Desktop | Mobile |
