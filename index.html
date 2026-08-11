@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="mobile-web-app-capable" content="yes" />
+  <!-- "Adicionar à Tela de Início" no iOS abre sem a barra do Safari, e a barra
+       é a maior mordida na altura útil quando se joga deitado -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#0b1026" />
   <title>A Torre das Sete Luzes</title>
   <!-- fontes são self-hosted via @fontsource (importadas em src/main.ts) -->
@@ -16,9 +20,16 @@
       touch-action: none;
       -webkit-user-select: none; user-select: none;
     }
-    /* 100dvh acompanha a barra de endereço do Android; o JS ainda ajusta a
-       altura exata via visualViewport, isto é só o valor de partida */
-    #game { width: 100%; height: 100%; height: 100dvh; }
+    /* `fixed` + `inset: 0` de propósito: assim a div do jogo tem tamanho
+       próprio e não depende da cadeia de alturas de html/body para existir.
+       Era isso que faltava quando o Safari do iPhone media a div como uma tira
+       e o canvas encolhia junto. 100dvh acompanha a barra de endereço do
+       Android; o JS ainda crava largura e altura exatas via visualViewport,
+       isto aqui é só o valor de partida. */
+    #game {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%; height: 100dvh;
+    }
     #game canvas { display: block; }
     /* Gire o aparelho — 16:9 deitado numa tela em pé vira uma tira ilegível */
     #rotate-overlay {

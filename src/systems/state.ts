@@ -7,7 +7,8 @@ import {
   trancasDe,
   ResolutionId,
   TrackId,
-  UI_SCALES
+  UI_SCALES,
+  isTouchDevice
 } from '../data/config';
 import { resetQuestionHistory } from './questions';
 
@@ -55,7 +56,10 @@ const defaultSettings: Settings = {
   difficulty: 'escudeiro',
   track: 'festiva',
   resolutionId: '540',
-  uiScale: 1
+  // no celular a interface nasce um degrau maior: a área visível deitada tem
+  // ~330px de altura contra as 540 do mundo lógico, então tudo já chega ao olho
+  // reduzido a ~60%. Quem preferir o tamanho antigo troca nas opções.
+  uiScale: isTouchDevice() ? 1.15 : 1
 };
 
 /** Dificuldades já vencidas alguma vez. As estrelas e os recordes saem daqui. */

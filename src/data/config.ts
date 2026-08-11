@@ -5,21 +5,43 @@ export const GAME_HEIGHT = 540;
 
 /** Largura do design original; nenhuma tela recebe menos mundo que isto. */
 const DESIGN_WIDTH = 960;
-/** Teto para telas ultralargas, senão o cenário se espalha demais. */
+/**
+ * Teto para telas ultralargas, senão o cenário se espalha demais.
+ *
+ * Já foi tentado subir isto no celular deitado, para acabar com as tarjas
+ * pretas das laterais. Não compensa: alargar o mundo não aumenta nada na tela
+ * (a altura lógica é fixa em 540 e é ela que manda na escala), só põe mais
+ * chão para o cavaleiro atravessar a pé — e o ranking é por tempo, então quem
+ * jogasse num aparelho mais largo correria mais metros pela mesma partida.
+ */
 const MAX_WIDTH = 1280;
 
 export const isTouchDevice = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true;
 
+/** Área realmente visível em CSS px — o que sobra depois da barra do navegador. */
+export function viewportSize(): { w: number; h: number } {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+  return {
+    w: Math.round(vv?.width || window.innerWidth),
+    h: Math.round(vv?.height || window.innerHeight)
+  };
+}
+
 /**
- * Medidas da tela em CSS px. No celular vale `screen`, não `innerWidth`: a
- * barra de endereço do Android come dezenas de pixels da altura e voltaria
- * uma proporção diferente a cada carregamento da página.
+ * Medidas que definem a proporção do mundo.
+ *
+ * No celular **deitado** vale a área visível: ela já desconta a barra do
+ * navegador, que é justamente o que torna a tela útil mais larga que a do
+ * aparelho. Em pé ela não serve de nada (o jogo ainda vai ser girado, e a
+ * proporção de pé é o inverso da que interessa), então aí vale `screen` — e é
+ * também por isso que não se usa `innerHeight` no Android, onde a barra de
+ * endereço aparece e some e devolveria uma proporção diferente a cada carga.
  */
 export function screenSize(): { w: number; h: number } {
-  if (!isTouchDevice() || !window.screen?.width || !window.screen?.height) {
-    return { w: window.innerWidth, h: window.innerHeight };
-  }
+  const visivel = viewportSize();
+  if (!isTouchDevice() || !window.screen?.width || !window.screen?.height) return visivel;
+  if (visivel.w > visivel.h && visivel.w > 0 && visivel.h > 0) return visivel;
   return { w: window.screen.width, h: window.screen.height };
 }
 

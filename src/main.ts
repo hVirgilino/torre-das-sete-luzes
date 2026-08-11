@@ -6,7 +6,7 @@ import '@fontsource/im-fell-english/400.css';
 import '@fontsource/im-fell-english/400-italic.css';
 
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH, isTouchDevice } from './data/config';
+import { GAME_HEIGHT, GAME_WIDTH, isTouchDevice, viewportSize } from './data/config';
 import { renderScale, installTextSharpening } from './systems/display';
 import { BootScene } from './scenes/Boot';
 import { MenuScene } from './scenes/Menu';
@@ -25,18 +25,37 @@ import { ManutencaoScene } from './scenes/Manutencao';
  * joga, e `100%` de altura em CSS resolve para o viewport grande — o rodapé do
  * jogo (justo onde ficam os controles de toque) ficava cortado. `visualViewport`
  * é o único que reporta a área realmente visível nesse momento.
+ *
+ * A div recebe largura e altura **em pixels**, e o mesmo par vai para o Phaser
+ * por `setParentSize`. Parece redundante — o Phaser mede a div sozinho — mas é
+ * a correção do bug que deixou o jogo do tamanho de um selo no Safari do
+ * iPhone: lá a medição da div voltou uma tira de poucos pixels, o FIT encolheu
+ * o canvas até aquilo e nunca mais cresceu, porque a medida seguinte continuava
+ * batendo com a anterior. Dizendo o tamanho na mão, o valor errado não tem por
+ * onde entrar. `refresh()` reposiciona canvas e área de toque.
+ *
+ * O reaplique em cascata existe pelo mesmo motivo: no iOS a altura só assenta
+ * depois que a barra do navegador termina de se acomodar, e o primeiro valor
+ * costuma ser provisório.
  */
 function trackViewport(game: Phaser.Game) {
+  const host = document.getElementById('game');
   const apply = () => {
-    const vv = window.visualViewport;
-    const host = document.getElementById('game');
-    if (host && vv) host.style.height = `${vv.height}px`;
+    const { w, h } = viewportSize();
+    if (!w || !h) return;
+    if (host) {
+      host.style.width = `${w}px`;
+      host.style.height = `${h}px`;
+    }
+    game.scale.setParentSize(w, h);
     game.scale.refresh();
   };
   window.addEventListener('resize', apply);
   window.addEventListener('orientationchange', () => setTimeout(apply, 120));
   window.visualViewport?.addEventListener('resize', apply);
+  window.visualViewport?.addEventListener('scroll', apply);
   apply();
+  for (const atraso of [150, 500, 1200]) setTimeout(apply, atraso);
 }
 
 /** Pede para girar o aparelho: 16:9 deitado em pé vira uma tira ilegível. */
