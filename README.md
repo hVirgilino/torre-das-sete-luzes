@@ -51,13 +51,29 @@ git) ou use `vercel env pull .env.local`.
 | `ADMIN_PASSWORD_HASH` | senha do painel (`npm run admin:hash -- "senha"`) |
 | `MANUTENCAO_CODIGO` | código do cofre da tela de manutenção — **padrão `199`** |
 | `MANUTENCAO_HASH` | senha só da manutenção; sem ela vale `ADMIN_PASSWORD_HASH` |
+| `VITE_MANUTENCAO` | mostra a tela de manutenção — **build**, padrão ligado em produção |
+| `VITE_COFRE` | desenha a fechadura na tela de manutenção — **build**, padrão ligado |
 
 ### Tela de manutenção
 
-Enquanto o Boot abrir `Manutencao` no lugar de `Menu`, quem entra vê o recado e
-um **cofre digital** desenhado abaixo do cavaleiro. Digitar o código (teclado
-numérico na tela ou o teclado físico) chama `POST /api/manutencao`, e o acerto
-grava a liberação no `localStorage` deste navegador.
+Duas chaves decidem o portão, e são **variáveis de build** (`VITE_*`, embutidas
+no bundle): mudar na Vercel só vale depois de um redeploy.
+
+| `VITE_MANUTENCAO` | `VITE_COFRE` | O que o jogador encontra |
+|---|---|---|
+| `on` | `on` | tela de manutenção com a fechadura — quem sabe o código atravessa |
+| `on` | `off` | tela de manutenção para todos, sem passagem nenhuma |
+| `off` | qualquer | jogo aberto (o dia do lançamento) |
+
+Sem as variáveis: manutenção **ligada** em produção — esquecer de configurar não
+pode abrir o jogo ao mundo por acidente — e desligada no `npm run dev`; cofre
+ligado. Ambas aceitam `on/off`, `1/0`, `true/false`, `sim/não`.
+
+Com o cofre ligado, quem entra vê o recado e um **cofre digital** desenhado
+abaixo do cavaleiro. Digitar o código (teclado numérico na tela ou o teclado
+físico) chama `POST /api/manutencao`, e o acerto grava a liberação no
+`localStorage` deste navegador. Desligar o cofre fecha até para esses
+navegadores: a única passagem deixou de existir.
 
 Vale lembrar que isso é uma **tranca social**, não uma fronteira de segurança:
 três dígitos são mil combinações e quem segura a força bruta é o rate limit da

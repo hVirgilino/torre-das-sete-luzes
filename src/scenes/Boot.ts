@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT, DESIGN_DX } from '../data/config';
+import { COFRE_ATIVO, EM_MANUTENCAO } from '../data/ambiente';
 import { manutencaoLiberada } from './Manutencao';
 
 /** a lua fica ancorada na borda direita, não numa coluna fixa de 960 */
@@ -31,9 +32,11 @@ export class BootScene extends Phaser.Scene {
     this.makeVitrola();
     this.makeMisc();
     this.makeAnimations();
-    // MANUTENÇÃO: quem já digitou a sequência entra direto no jogo.
-    // Para devolver o jogo ao ar para todos, troque por 'Menu'.
-    this.scene.start(manutencaoLiberada() ? 'Menu' : 'Manutencao');
+    // MANUTENÇÃO: ligada por VITE_MANUTENCAO (ver data/ambiente). Quem já abriu
+    // o cofre neste navegador entra direto — a não ser que o cofre esteja
+    // desligado, e aí não há passagem para ninguém.
+    const barrado = EM_MANUTENCAO && !(COFRE_ATIVO && manutencaoLiberada());
+    this.scene.start(barrado ? 'Manutencao' : 'Menu');
   }
 
   private ctxOf(key: string, w: number, h: number) {

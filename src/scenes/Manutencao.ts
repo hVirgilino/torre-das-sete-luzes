@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { FONTS, GAME_HEIGHT, GAME_WIDTH } from '../data/config';
+import { COFRE_ATIVO } from '../data/ambiente';
 import { Audio } from '../systems/audio';
 import { initSceneView, uiPx } from '../systems/display';
 
@@ -54,7 +55,9 @@ export function manutencaoLiberada(): boolean {
  * Tela de manutenção — substitui o menu enquanto o jogo está fora do ar.
  *
  * Não altera regra nenhuma do jogo: só troca a cena que o Boot abre no fim.
- * Para devolver o jogo ao ar para todos, o Boot volta a abrir 'Menu'.
+ * Quem decide se ela aparece é `VITE_MANUTENCAO`, e se a fechadura existe é
+ * `VITE_COFRE` — ver `data/ambiente`. Devolver o jogo ao ar é girar a chave no
+ * painel da Vercel e redeployar, sem tocar em código.
  *
  * O cavaleiro anda e salta em laço, sem física: uma travessia por tween e dois
  * arcos de salto por volta. Arcade Physics aqui só traria corpo, colisão e
@@ -91,10 +94,11 @@ export class ManutencaoScene extends Phaser.Scene {
 
     /**
      * O piso sobe bem acima do meio da tela para abrir a faixa de baixo: é ali
-     * que o cofre mora, e ele pede ~170px livres entre o piso e a borda. Com o
-     * chão no lugar antigo (GAME_HEIGHT - 120) o painel não caberia.
+     * que o cofre mora, e ele pede ~170px livres entre o piso e a borda. Sem
+     * cofre (VITE_COFRE desligado) não há o que caber, e o chão volta ao lugar
+     * de sempre — senão a tela ficaria com um vão vazio embaixo.
      */
-    const chaoY = GAME_HEIGHT - 220;
+    const chaoY = GAME_HEIGHT - (COFRE_ATIVO ? 220 : 120);
 
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'bg-castle').setAlpha(0.35);
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'vignette').setAlpha(0.5);
@@ -135,10 +139,12 @@ export class ManutencaoScene extends Phaser.Scene {
     });
 
     // ------------------------------------------------------------- recado
-    // título e recado subiram junto com o chão: o ápice do salto do cavaleiro
-    // fica em chaoY - 72 (topo do sprite ~175) e não pode encostar neles
+    // título e recado sobem junto com o chão: o ápice do salto do cavaleiro
+    // fica em chaoY - 72 (topo do sprite ~175) e não pode encostar neles.
+    // Sem cofre o chão desce, e os dois voltam para o meio da tela.
+    const tituloY = COFRE_ATIVO ? 98 : 150;
     this.add
-      .text(GAME_WIDTH / 2, 98, 'Jogo em manutenção', {
+      .text(GAME_WIDTH / 2, tituloY, 'Jogo em manutenção', {
         fontFamily: FONTS.display,
         fontSize: uiPx(44),
         fontStyle: 'bold',
@@ -149,7 +155,7 @@ export class ManutencaoScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const recado = this.add
-      .text(GAME_WIDTH / 2, 148, 'A Torre está sendo reerguida. Voltai em breve, Sir.', {
+      .text(GAME_WIDTH / 2, tituloY + 50, 'A Torre está sendo reerguida. Voltai em breve, Sir.', {
         fontFamily: FONTS.body,
         fontSize: uiPx(20),
         fontStyle: 'italic',
@@ -166,8 +172,11 @@ export class ManutencaoScene extends Phaser.Scene {
     });
 
     this.animarCavaleiro(chaoY);
-    this.montarCofre();
-    this.escutarTeclado();
+    // sem cofre a tela é só o recado: não há fechadura nem tecla que responda
+    if (COFRE_ATIVO) {
+      this.montarCofre();
+      this.escutarTeclado();
+    }
   }
 
   // ------------------------------------------------------------- o cofre
